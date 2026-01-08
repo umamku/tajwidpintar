@@ -576,12 +576,21 @@ const ChatInterface = ({ knowledgeList }) => {
     e.preventDefault();
     if (!input.trim()) return;
 
+    // 1. Catat pesan user
     const userMsg = { id: Date.now(), role: 'user', text: input };
+    
+    // 2. Siapkan riwayat chat untuk dikirim ke AI (Ambil 5 pesan terakhir)
+    // Ini yang membuat AI bisa menjawab pertanyaan berlanjut
+    const chatHistory = messages.slice(-5).map(m => 
+      `${m.role === 'user' ? 'USER' : 'USTADZ'}: ${m.text}`
+    ).join('\n');
+
     setMessages(prev => [...prev, userMsg]);
     setInput('');
     setIsTyping(true);
 
-    const contextString = knowledgeList.map(item => 
+    // 3. Format Database Tajwid (Tetap sesuai code existing Anda)
+    const knowledgeContext = knowledgeList.map(item => 
       `ID: ${item.id}
 MATERI: ${item.title}
 KATEGORI: ${item.category}
@@ -592,7 +601,21 @@ ${item.audioData ? `[AUDIO_ID: ${item.id}]` : '[NO_AUDIO]'}
 ---`
     ).join('\n');
 
-    const answer = await askGemini(userMsg.text, contextString);
+    // 4. Gabungkan Riwayat + Database sebagai konteks ke Gemini
+    const finalContext = `
+RIWAYAT CHAT SEBELUMNYA:
+${chatHistory}
+
+DATABASE MATERI TAJWID:
+${knowledgeContext}
+
+INSTRUKSI: Jawablah pertanyaan USER dengan ramah sebagai Ustadz. 
+Jika pertanyaan USER merujuk pada obrolan sebelumnya (seperti kata "itu", "nya", atau "contoh lain"), 
+lihatlah RIWAYAT CHAT SEBELUMNYA untuk memahaminya.
+    `;
+
+    // 5. Kirim pertanyaan asli user dengan konteks lengkap
+    const answer = await askGemini(userMsg.text, finalContext);
 
     const aiMsg = { id: Date.now() + 1, role: 'ai', text: answer };
     setMessages(prev => [...prev, aiMsg]);
@@ -1214,8 +1237,8 @@ export default function App() {
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 backdrop-blur-sm rounded-full border border-slate-200 shadow-sm">
           <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse"></div>
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-            TajwidPintar v1.0
-          </span>
+  TajwidPintar v1.0.0-Stable
+</span>
         </div>
         <p className="text-[9px] text-slate-400 mt-2 font-medium tracking-wide">
           © 2026 Markaz Qur'an Darussalam
