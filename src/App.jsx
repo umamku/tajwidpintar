@@ -436,6 +436,62 @@ const ChatInterface = ({ knowledgeList }) => {
   const [isListening, setIsListening] = useState(false);
   const messagesEndRef = useRef(null);
 
+// --- FITUR VOICE READING (ROBUST VERSION) ---
+  const [isSpeaking, setIsSpeaking] = useState(null);
+
+  const speak = (text, msgId) => {
+    // 1. Jika sedang bicara, hentikan semuanya
+    window.speechSynthesis.cancel();
+    
+    // 2. Jika tombol yang sama diklik lagi saat bicara, status jadi berhenti
+    if (isSpeaking === msgId) {
+      setIsSpeaking(null);
+      return;
+    }
+
+    // 3. Bersihkan teks (Penting: bersihkan lebih teliti)
+    const cleanText = text
+      .replace(/\[\[AUDIO:\s*[^\]]+\]\]/g, '') // Hapus tag audio
+      .replace(/\*\*/g, '')                   // Hapus markdown bold
+      .replace(/[\(\)]/g, '')                 // Hapus kurung agar lebih lancar
+      .trim();
+
+    if (!cleanText) return;
+
+    // 4. Pecah teks panjang menjadi potongan kalimat (berdasarkan titik/koma)
+    // Ini rahasia agar teks panjang tidak macet
+    const sentences = cleanText.match(/[^\.!\?]+[\.!\?]+/g) || [cleanText];
+    let currentSentence = 0;
+
+    const speakNextSentence = () => {
+      if (currentSentence < sentences.length) {
+        const utterance = new SpeechSynthesisUtterance(sentences[currentSentence]);
+        utterance.lang = 'id-ID';
+        utterance.rate = 1.0;
+
+        utterance.onstart = () => setIsSpeaking(msgId);
+        
+        utterance.onend = () => {
+          currentSentence++;
+          if (currentSentence < sentences.length) {
+            speakNextSentence(); // Baca kalimat berikutnya
+          } else {
+            setIsSpeaking(null); // Selesai semua
+          }
+        };
+
+        utterance.onerror = (e) => {
+          console.error("Speech Error:", e);
+          setIsSpeaking(null);
+        };
+
+        window.speechSynthesis.speak(utterance);
+      }
+    };
+
+    speakNextSentence();
+  };
+
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
@@ -561,7 +617,27 @@ ${item.audioData ? `[AUDIO_ID: ${item.id}]` : '[NO_AUDIO]'}
               }`}>
                 {msg.role === 'ai' ? (
                   <div className="whitespace-pre-wrap">
-                    {renderMessageContent(msg.text)}
+<div className="flex flex-col">
+  <div className="whitespace-pre-wrap">
+    {renderMessageContent(msg.text)}
+  </div>
+  
+  {/* TOMBOL DENGARKAN */}
+  <button 
+    onClick={() => speak(msg.text, msg.id)}
+    className={`mt-3 self-start flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border transition-all ${
+      isSpeaking === msg.id 
+        ? 'bg-amber-50 text-amber-600 border-amber-200 shadow-inner' 
+        : 'bg-slate-50 text-slate-400 border-slate-100 hover:text-teal-600 hover:bg-white shadow-sm'
+    }`}
+  >
+    {isSpeaking === msg.id ? (
+      <><Icons.Stop size={12} className="animate-pulse" /> BERHENTI</>
+    ) : (
+      <><Icons.Play size={12} /> DENGARKAN PENJELASAN</>
+    )}
+  </button>
+</div>
                   </div>
                 ) : msg.text}
               </div>
