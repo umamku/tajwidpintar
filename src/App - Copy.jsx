@@ -706,14 +706,6 @@ const AdminPanel = ({ knowledgeList, user, collectionPath }) => {
   const fileInputRef = useRef(null);
   const audioInputRef = useRef(null);
 
-// --- LANGKAH A: TARUH DI SINI ---
-  const existingSources = useMemo(() => {
-    const sources = knowledgeList
-      .map(item => item.source)
-      .filter(source => source && source.trim() !== "");
-    return [...new Set(sources)]; 
-  }, [knowledgeList]);
-
   const handleCreateNew = () => {
     setEditingId(null);
     setFormData({ title: '', category: '', content: '', tags: '', source: '', audioData: '' });
@@ -788,78 +780,40 @@ const AdminPanel = ({ knowledgeList, user, collectionPath }) => {
 
   const processFile = async (file) => {
     if (!file) return;
-    setIsAnalyzingImage(true);
-
-    const reader = new FileReader();
-    reader.onload = async (event) => {
-      try {
-        let textToProcess = "";
-        
-        // 1. Ambil teks dasar (OCR jika gambar, teks jika file md/txt)
-        if (file.type.startsWith('image/')) {
+    if (file.type === "text/plain" || file.name.endsWith('.md')) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const text = event.target.result;
+        setFormData(prev => ({
+          ...prev,
+          content: prev.content ? prev.content + "\n\n" + text : text,
+          title: prev.title || file.name.replace(/\.[^/.]+$/, "")
+        }));
+      };
+      reader.readAsText(file);
+    } else if (file.type.startsWith('image/')) {
+      setIsAnalyzingImage(true);
+      const reader = new FileReader();
+      reader.onload = async (event) => {
+        try {
           const base64Data = event.target.result.split(',')[1];
-          textToProcess = await extractTextFromImage(base64Data, file.type);
-        } else {
-          textToProcess = event.target.result;
+          const extractedText = await extractTextFromImage(base64Data, file.type);
+          setFormData(prev => ({
+            ...prev,
+            content: prev.content ? prev.content + "\n\n[Dari Gambar]: " + extractedText : "[Dari Gambar]: " + extractedText,
+            title: prev.title || "Scan Materi Tajwid"
+          }));
+        } catch (err) {
+          alert("Gagal membaca teks dari gambar.");
+        } finally {
+          setIsAnalyzingImage(false);
         }
-
-        if (!textToProcess) throw new Error("Teks kosong");
-
-        // 2. Gunakan Gemini 2.5 Flash untuk Analisis Auto-Fill
-        const cleanKey = apiKey ? apiKey.trim() : "";
-        const targetModel = "gemini-2.5-flash"; 
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`;
-        
-        const prompt = `Analisis teks Tajwid ini. Berikan HANYA JSON murni tanpa kata-kata lain.
-          Pilihan Kategori: Hukum Nun Mati & Tanwin, Hukum Mim Mati, Hukum Mad, Hukum Idgham, Qalqalah, Makharijul Huruf, Sifat Huruf, Waqaf & Ibtida.
-          JSON:
-          {
-            "judul": "judul materi",
-            "kategori": "pilih satu dari daftar di atas",
-            "tags": "3 kata kunci",
-            "konten": "transkripsi lengkap"
-          }
-          Teks: ${textToProcess}`;
-
-        const aiResponse = await fetch(endpoint, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
-        });
-
-        const aiData = await aiResponse.json();
-        const rawJson = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
-        const cleanJson = rawJson.replace(/```json|```/g, "").trim();
-        const result = JSON.parse(cleanJson);
-
-        // 3. Masukkan ke Form secara Otomatis
-        setFormData(prev => ({
-          ...prev,
-          title: result.judul || "Materi Baru",
-          category: result.kategori || "",
-          tags: result.tags || "",
-          content: result.konten || textToProcess
-        }));
-
-      } catch (err) {
-        console.error("Auto-fill error:", err);
-        alert("Gagal mengisi otomatis, teks dimasukkan manual ke kolom konten.");
-        setFormData(prev => ({
-          ...prev,
-          content: prev.content ? prev.content + "\n\n" + (event.target.result) : "Gagal Auto-fill"
-        }));
-      } finally {
-        setIsAnalyzingImage(false);
-      }
-    };
-
-    if (file.type.startsWith('image/')) {
+      };
       reader.readAsDataURL(file);
     } else {
-      reader.readAsText(file);
+      alert("Format file tidak didukung.");
     }
   };
-
 
   const handleDrag = (e) => {
     e.preventDefault(); e.stopPropagation();
@@ -985,23 +939,9 @@ const AdminPanel = ({ knowledgeList, user, collectionPath }) => {
               </div>
 
               <div>
-  <label className="block text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2">
-    <Icons.Book size={14} className="text-teal-600"/> Sumber Kitab
-  </label>
-  <input 
-    type="text" 
-    list="list-sumber" 
-    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 outline-none text-sm" 
-    placeholder="Ketik atau pilih sumber..." 
-    value={formData.source} 
-    onChange={(e) => setFormData({...formData, source: e.target.value})} 
-  />
-  <datalist id="list-sumber">
-    {existingSources.map((src, index) => (
-      <option key={index} value={src} />
-    ))}
-  </datalist>
-</div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2"><Icons.Book size={14} className="text-teal-600"/> Sumber Kitab</label>
+                <input type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 focus:border-teal-500 outline-none transition text-sm" placeholder="Contoh: Tuhfatul Athfal" value={formData.source} onChange={(e) => setFormData({...formData, source: e.target.value})} />
+              </div>
 
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
                 <label className="block text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2"><Icons.Mic size={14} className="text-teal-600"/> <span className="ml-1">Audio Contoh (Opsional)</span></label>
@@ -1209,18 +1149,6 @@ export default function App() {
           </div>
         )}
       </main>
-{/* --- LABEL VERSI APLIKASI (TAMBAHKAN DI SINI) --- */}
-      <footer className="max-w-6xl mx-auto px-4 py-6 text-center">
-        <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 backdrop-blur-sm rounded-full border border-slate-200 shadow-sm">
-          <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse"></div>
-          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-            TajwidPintar v1.0
-          </span>
-        </div>
-        <p className="text-[9px] text-slate-400 mt-2 font-medium tracking-wide">
-          © 2026 Markaz Qur'an Darussalam
-        </p>
-    </footer>
     </div>
   );
 }
