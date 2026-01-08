@@ -6,7 +6,9 @@ import {
   getAuth, 
   signInAnonymously, 
   onAuthStateChanged,
-  signInWithCustomToken
+  signInWithCustomToken,
+  signInWithEmailAndPassword,
+  signOut
 } from 'firebase/auth';
 import { 
   getFirestore, 
@@ -175,7 +177,7 @@ async function askGemini(question, knowledgeContext) {
   // 4. MERGE PROMPT (Gabungkan Instruksi + Pertanyaan User)
   // Model gemini-pro lebih suka instruksi digabung jadi satu teks panjang
   const systemPrompt = `
-    Anda adalah Ustaz AI yang ahli dalam Ilmu Tajwid Al-Qur'an dari Markaz Qur'an Darussalam.
+    Anda adalah Asisten Ustadz dalam bidang Ilmu Tajwid Al-Qur'an dari Markaz Qur'an Darussalam.
     Tugas Anda adalah menjawab pertanyaan user berdasarkan CONTEXT berikut.
     
     CONTEXT DATA:
@@ -317,91 +319,43 @@ const Navbar = ({ currentMode, setMode, isAdminAuthenticated, setIsAdminModeAtte
   </nav>
 );
 
-// --- SECURITY: ADMIN LOGIN COMPONENT ---
-const AdminLogin = ({ onLogin, onClose }) => {
+// --- SECURE ADMIN LOGIN (FIREBASE AUTH) ---
+// Hapus kode AdminLogin yang lama, GANTI dengan yang ini:
+const AdminLogin = ({ onClose }) => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
-  const [isLocked, setIsLocked] = useState(false);
-  const [timeLeft, setTimeLeft] = useState(0);
-
-  // Check lockout on mount
-  useEffect(() => {
-    const lockUntil = localStorage.getItem('adminLockoutUntil');
-    if (lockUntil && new Date().getTime() < parseInt(lockUntil)) {
-      setIsLocked(true);
-      const remaining = Math.ceil((parseInt(lockUntil) - new Date().getTime()) / 1000);
-      setTimeLeft(remaining);
-      
-      const timer = setInterval(() => {
-        const now = new Date().getTime();
-        const diff = Math.ceil((parseInt(lockUntil) - now) / 1000);
-        if (diff <= 0) {
-          setIsLocked(false);
-          localStorage.removeItem('adminLockoutUntil');
-          clearInterval(timer);
-        } else {
-          setTimeLeft(diff);
-        }
-      }, 1000);
-      return () => clearInterval(timer);
-    }
-  }, []);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    if (isLocked) return;
-
     setLoading(true);
     setError('');
 
-    // Artificial delay untuk mencegah brute force (Timing Attack mitigation)
-    await new Promise(r => setTimeout(r, 1000)); 
-
-    const isValid = await verifyPassword(password);
-
-    if (isValid) {
-      onLogin();
-    } else {
-      // Logic lockout sederhana
-      const currentAttempts = parseInt(localStorage.getItem('adminLoginAttempts') || '0') + 1;
-      localStorage.setItem('adminLoginAttempts', currentAttempts.toString());
+    try {
+      // LOGIKA BARU: Login ke Firebase
+      // Pastikan 'auth' dan 'signInWithEmailAndPassword' sudah di-import di atas
+      await signInWithEmailAndPassword(auth, email, password);
       
-      setError('Password salah.');
-      
-      // Lockout setelah 3 kali gagal
-      if (currentAttempts >= 3) {
-        const lockTime = 30000; // 30 detik
-        const unlockAt = new Date().getTime() + lockTime;
-        localStorage.setItem('adminLockoutUntil', unlockAt.toString());
-        localStorage.setItem('adminLoginAttempts', '0'); // Reset attempts after locking
-        
-        setIsLocked(true);
-        setTimeLeft(30);
-        setError('Terlalu banyak percobaan. Akses dikunci sementara.');
-        
-        // Start countdown locally
-        const timer = setInterval(() => {
-          setTimeLeft(prev => {
-            if (prev <= 1) {
-              clearInterval(timer);
-              setIsLocked(false);
-              localStorage.removeItem('adminLockoutUntil');
-              setError('');
-              return 0;
-            }
-            return prev - 1;
-          });
-        }, 1000);
+      // Jika berhasil, 'onAuthStateChanged' di App akan otomatis mendeteksi admin login
+      // Kita cukup tutup modalnya
+      //onClose(); 
+    } catch (err) {
+      console.error("Login Error:", err);
+      if (err.code === 'auth/invalid-credential' || err.code === 'auth/user-not-found' || err.code === 'auth/wrong-password') {
+         setError('Email atau password salah.');
+      } else if (err.code === 'auth/too-many-requests') {
+         setError('Terlalu banyak percobaan. Akun dikunci sementara oleh Google.');
+      } else {
+         setError('Gagal login. Periksa koneksi internet.');
       }
+    } finally {
+      setLoading(false);
     }
-    setLoading(false);
   };
 
   return (
-    // Menggunakan fixed inset-0 dengan flex dan padding untuk memastikan centered di mobile
-    // Menambahkan max-h dan overflow untuk konten modal agar tidak tertutup keyboard
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm flex flex-col overflow-hidden max-h-[90vh] animate-in fade-in zoom-in duration-300">
         <div className="bg-teal-900 p-6 text-center relative shrink-0">
@@ -409,28 +363,40 @@ const AdminLogin = ({ onLogin, onClose }) => {
           <div className="bg-teal-800 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 shadow-inner">
             <Icons.Lock size={32} className="text-amber-400" />
           </div>
-          <h2 className="text-xl font-bold text-white">Area Terbatas</h2>
-          <p className="text-teal-200 text-xs mt-1">Hanya untuk Admin Markaz Qur'an</p>
+          <h2 className="text-xl font-bold text-white">Login Admin</h2>
         </div>
         
-        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto">
-          <div className="mb-4">
-            <label className="block text-sm font-semibold text-slate-700 mb-2">Password Admin</label>
+        <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-4">
+          {/* Input Email */}
+          <div>
+             <label className="block text-sm font-semibold text-slate-700 mb-1">Email Admin</label>
+             <input 
+               type="email" 
+               className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 outline-none text-slate-800"
+               placeholder=""
+               value={email}
+               onChange={(e) => setEmail(e.target.value)}
+               required
+               autoFocus
+             />
+          </div>
+
+          {/* Input Password */}
+          <div>
+            <label className="block text-sm font-semibold text-slate-700 mb-1">Password</label>
             <div className="relative">
               <input 
-                type={showPassword ? "text" : "password"} 
-                className="w-full pl-4 pr-12 py-3 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 focus:border-teal-500 outline-none transition disabled:bg-slate-100 disabled:text-slate-400"
-                placeholder="Masukkan password..."
+                type={showPassword ? "text" : "password"}
+                className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 outline-none text-slate-800"
+                placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                disabled={loading || isLocked}
-                autoFocus
+                required
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-teal-600 transition p-2"
-                disabled={loading || isLocked}
               >
                 {showPassword ? <Icons.EyeOff size={20} /> : <Icons.Eye size={20} />}
               </button>
@@ -438,28 +404,24 @@ const AdminLogin = ({ onLogin, onClose }) => {
           </div>
 
           {error && (
-            <div className={`mb-4 p-3 rounded-lg text-sm flex items-start gap-2 ${isLocked ? 'bg-red-100 text-red-700 border border-red-200' : 'bg-rose-50 text-rose-600 border border-rose-100'}`}>
-              <Icons.Shield size={16} className="shrink-0 mt-0.5" />
-              <span>{error} {isLocked && <strong>({timeLeft}s)</strong>}</span>
+            <div className="p-3 rounded-lg text-sm bg-red-100 text-red-700 border border-red-200 flex items-center gap-2">
+              <Icons.Shield size={16} className="shrink-0" /> 
+              <span>{error}</span>
             </div>
           )}
 
           <button 
             type="submit" 
-            disabled={loading || isLocked || !password}
-            className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold shadow-lg shadow-teal-200 transition disabled:opacity-50 disabled:cursor-not-allowed flex justify-center items-center gap-2 mt-2"
+            disabled={loading}
+            className="w-full py-3.5 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold shadow-lg transition disabled:opacity-50 flex justify-center items-center gap-2"
           >
-            {loading ? <Icons.Loader size={20} /> : 'Masuk'}
+            {loading ? <Icons.Loader size={20} /> : 'Masuk Dashboard'}
           </button>
         </form>
-        <div className="bg-slate-50 p-3 text-center text-[10px] text-slate-400 border-t border-slate-100 shrink-0">
-          Sistem dilindungi dengan Anti-Bruteforce & Enkripsi
-        </div>
       </div>
     </div>
   );
 };
-
 // --- USER VIEW: Chat & Voice Interface ---
 const ChatInterface = ({ knowledgeList }) => {
   const [messages, setMessages] = useState([
@@ -992,41 +954,48 @@ const AdminPanel = ({ knowledgeList, user, collectionPath }) => {
 };
 
 // --- MAIN APP COMPONENT ---
+// --- MAIN APP COMPONENT ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [mode, setMode] = useState('user'); 
   const [knowledgeList, setKnowledgeList] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Security States
-  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(false);
+  // State untuk modal login
   const [showLoginModal, setShowLoginModal] = useState(false);
 
   // Firestore Path
-  // Menggunakan fixed ID untuk persistensi data antar link share
-  // KEMBALI KE DEFAULT DYNAMIC ID AGAR PERMISSION DITERIMA
   const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
   const collectionPath = ['artifacts', appId, 'public', 'data', 'tajwid_knowledge'];
 
+  // --- LOGIKA UTAMA (YANG DIPERBAIKI) ---
+  // Mendeteksi status login secara otomatis & real-time
   useEffect(() => {
-    const initAuth = async () => {
-      try {
-        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
-          await signInWithCustomToken(auth, __initial_auth_token);
-        } else {
-          await signInAnonymously(auth);
-        }
-      } catch (error) {
-        console.error("Auth error:", error);
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      
+      if (currentUser && !currentUser.isAnonymous) {
+        // KASUS 1: TERDETEKSI ADMIN
+        // Otomatis pindah ke mode admin & tutup loading/modal
+        setMode('admin'); 
+        setShowLoginModal(false); 
+        setLoading(false);
+      } else if (!currentUser) {
+        // KASUS 2: BELUM ADA USER
+        // Login sebagai tamu (Anonymous) dulu
+        signInAnonymously(auth).catch((err) => console.error("Anon Auth Error", err));
+      } else {
+        // KASUS 3: TAMU (ANONYMOUS)
+        // Biarkan di mode user
+        setLoading(false);
       }
-    };
-
-    initAuth();
-    const unsubscribeAuth = onAuthStateChanged(auth, setUser);
-    return () => unsubscribeAuth();
+    });
+    return () => unsubscribe();
   }, []);
 
+  // --- Ambil Data Materi (Tetap Sama) ---
   useEffect(() => {
+    // Hanya ambil data jika user sudah siap (baik admin maupun tamu)
     if (!user) return;
 
     const q = query(collection(db, ...collectionPath));
@@ -1035,33 +1004,51 @@ export default function App() {
         id: doc.id,
         ...doc.data()
       }));
+      // Urutkan dari yang terbaru
       items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
       setKnowledgeList(items);
       setLoading(false);
     });
 
     return () => unsubscribeData();
-  }, [user]);
+  }, [user]); // Dependency ke 'user' agar aman
 
-  // Handle Login Success
-  const handleLoginSuccess = () => {
-    setIsAdminAuthenticated(true);
-    setShowLoginModal(false);
-    setMode('admin');
-  };
+  // --- Keamanan Anti-Inspect (Tetap Sama) ---
+  useEffect(() => {
+    const handleContextMenu = (e) => e.preventDefault();
+    const handleKeyDown = (e) => {
+      if (
+        e.key === 'F12' ||
+        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J')) ||
+        (e.ctrlKey && e.key === 'U')
+      ) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // --- Helper untuk Tombol Navbar ---
+  // Cek apakah user saat ini adalah admin (bukan tamu)
+  const isUserAdmin = user && !user.isAnonymous;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-10">
       <Navbar 
         currentMode={mode} 
         setMode={setMode} 
-        isAdminAuthenticated={isAdminAuthenticated}
+        isAdminAuthenticated={isUserAdmin} // Gunakan status user langsung dari Firebase
         setIsAdminModeAttempt={setShowLoginModal}
       />
 
       {showLoginModal && (
         <AdminLogin 
-          onLogin={handleLoginSuccess} 
+          // Tidak butuh onLogin manual lagi, karena useEffect di atas akan menangani
           onClose={() => setShowLoginModal(false)}
         />
       )}
@@ -1072,7 +1059,7 @@ export default function App() {
             <Icons.Loader size={48} />
             <p className="mt-4 text-sm font-medium animate-pulse">Menyiapkan Data...</p>
           </div>
-        ) : mode === 'admin' ? (
+        ) : mode === 'admin' && isUserAdmin ? (
           <AdminPanel knowledgeList={knowledgeList} user={user} collectionPath={collectionPath} />
         ) : (
           <div className="max-w-3xl mx-auto">
