@@ -159,7 +159,7 @@ async function verifyPassword(inputPassword) {
 
 // --- Helper: Call Gemini API (Text Only) ---
 async function askGemini(question, knowledgeContext) {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`;
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
   const systemPrompt = `
     Anda adalah Asisten Ustadz dalam Ilmu Tajwid Al-Qur'an dari Markaz Qur'an Darussalam.
