@@ -138,7 +138,7 @@ const analytics = getAnalytics(app);
 const appId = 'tajwid-app-production';
 
 // API Key Gemini
-const apiKey = "AIzaSyBF4Pp_Iqngxsbf7aealTu2MMRlP7FMo8o";
+const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
 // --- SECURITY UTILITIES ---
 // Menggunakan Base64 Encoding untuk "AdminMQD" agar tidak plain text di source code
@@ -158,32 +158,36 @@ async function verifyPassword(inputPassword) {
 }
 
 // --- Helper: Call Gemini API (Text Only) ---
+// --- Helper: Call Gemini API (Text Only) ---
 async function askGemini(question, knowledgeContext) {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+  // 1. BERSIHKAN API KEY
+  const cleanKey = apiKey ? apiKey.trim() : "";
+  if (!cleanKey) return "Error: API Key kosong/salah.";
 
+  // 2. GUNAKAN MODEL 'GEMINI-PRO' (Model Generasi 1.0 - Paling Kompatibel)
+  // Jika 1.5 Flash tidak bisa, model ini adalah pilihan paling aman.
+  const targetModel = "gemini-2.5-flash"; 
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`;
+
+  // 3. LOGGING (Agar kita tahu model apa yang dipakai)
+  console.log("Mencoba menggunakan model:", targetModel);
+
+  // 4. MERGE PROMPT (Gabungkan Instruksi + Pertanyaan User)
+  // Model gemini-pro lebih suka instruksi digabung jadi satu teks panjang
   const systemPrompt = `
-    Anda adalah Asisten Ustadz dalam Ilmu Tajwid Al-Qur'an dari Markaz Qur'an Darussalam.
-    Tugas Anda adalah menjawab pertanyaan user tentang hukum bacaan, cara membaca, dan kaidah tajwid HANYA berdasarkan CONTEXT yang diberikan di bawah ini.
+    Anda adalah Ustaz AI yang ahli dalam Ilmu Tajwid Al-Qur'an dari Markaz Qur'an Darussalam.
+    Tugas Anda adalah menjawab pertanyaan user berdasarkan CONTEXT berikut.
     
-    ATURAN PENTING:
-    1. Jawab dengan sopan, menggunakan Bahasa Indonesia yang baik, dan sapaan yang santun.
-    2. Gunakan informasi HANYA dari bagian "CONTEXT DATA".
-    3. Jika jawaban ditemukan, SELALU sebutkan "Sumber Kitab/Rujukan" jika tersedia di data.
-    4. Jika data memiliki Audio ID (ditandai dengan [AUDIO_ID: ...]), dan user meminta contoh bacaan atau relevan untuk diperdengarkan, sertakan tag khusus: "[[AUDIO: ...]]" di akhir atau di bagian yang relevan dalam jawaban Anda.
-       Contoh: "Berikut adalah contoh bacaannya: [[AUDIO: doc123]]"
-       PENTING: JANGAN PERNAH membuat tag [[AUDIO: ...]] jika data konteks memiliki tanda [NO_AUDIO].
-       PENTING: Tulis ID audio persis seperti yang ada di context, jangan tambahkan tanda baca di dalamnya.
-    5. Gunakan format **bold** untuk penekanan kata penting.
-    6. Jika jawaban tidak ditemukan dalam CONTEXT, katakan: "Maaf, ilmu mengenai hal tersebut belum tersedia di database kami."
-    7. Jangan mengarang hukum tajwid sendiri.
-
-    CONTEXT DATA (KNOWLEDGE BANK):
+    CONTEXT DATA:
     ${knowledgeContext}
   `;
 
+  const finalPrompt = systemPrompt + "\n\n" + "PERTANYAAN USER: " + question;
+
   const payload = {
-    contents: [{ parts: [{ text: question }] }],
-    systemInstruction: { parts: [{ text: systemPrompt }] }
+    contents: [{ 
+      parts: [{ text: finalPrompt }] 
+    }]
   };
 
   try {
@@ -194,17 +198,31 @@ async function askGemini(question, knowledgeContext) {
     });
 
     const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, terjadi kesalahan saat memproses jawaban.";
+
+    if (data.error) {
+      console.error("Gemini Error:", data.error);
+      // Tampilkan pesan error spesifik jika gagal lagi
+      return `Error AI (${data.error.code}): ${data.error.message}`;
+    }
+
+    return data.candidates?.[0]?.content?.parts?.[0]?.text || "Maaf, AI tidak memberikan jawaban.";
   } catch (error) {
-    console.error("Gemini Error:", error);
-    return "Maaf, koneksi ke layanan AI terganggu.";
+    console.error("Network Error:", error);
+    return "Maaf, koneksi internet terganggu.";
   }
 }
 
+
 // --- Helper: Call Gemini API for Image Extraction (OCR) ---
 async function extractTextFromImage(base64Data, mimeType) {
-  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-  
+  // Menggunakan versi spesifik '001' yang pasti ada
+// Menggunakan versi spesifik '002'
+// Model Generasi 1.0 (Pasti Support)
+// 1. Pastikan API Key bersih (Perbaikan Bug: definisikan cleanKey dulu)
+  const cleanKey = apiKey ? apiKey.trim() : "";
+
+  // 2. Gunakan model Gemini 2.5 Pro (Support Gambar/Multimodal)
+  const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-pro:generateContent?key=${cleanKey}`;  
   const payload = {
     contents: [{
       parts: [
