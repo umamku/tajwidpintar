@@ -66,7 +66,6 @@ const Icons = {
   EyeOff: (props) => (<IconWrapper {...props}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></IconWrapper>),
   Copy: (props) => (<IconWrapper {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></IconWrapper>),
   Check: (props) => (<IconWrapper {...props}><polyline points="20 6 9 17 4 12"/></IconWrapper>),
-  // Tambahkan Icon Kamera
   Camera: (props) => (<IconWrapper {...props}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></IconWrapper>)
 };
 
@@ -89,7 +88,7 @@ const analytics = getAnalytics(app);
 const appId = 'tajwid-app-production';
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-// --- Helper: Call Gemini API (Updated for Image) ---
+// --- Helper: Call Gemini API ---
 async function askGemini(question, knowledgeContext, imageData = null) {
   const cleanKey = apiKey ? apiKey.trim() : "";
   if (!cleanKey) return "Error: API Key kosong/salah.";
@@ -97,28 +96,29 @@ async function askGemini(question, knowledgeContext, imageData = null) {
   const targetModel = "gemini-2.5-flash"; 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`;
 
-  // PROMPT DIUPDATE AGAR MENGHUBUNGKAN GAMBAR DENGAN CONTEXT DATA
+  // PROMPT AGAR JAWABAN NATURAL & MENGGUNAKAN DATA
   const systemPrompt = `
     Anda adalah Asisten Ustadz dalam bidang Ilmu Tajwid Al-Qur'an dari Markaz Qur'an Darussalam.
     
-    Tugas Utama:
-    1. Jawab pertanyaan user berdasarkan [CONTEXT DATA] di bawah ini.
-    2. JIKA ADA GAMBAR:
-       - Lakukan analisis visual/OCR pada gambar.
-       - Identifikasi hukum tajwid pada teks di gambar.
-       - HUBUNGKAN dan JELASKAN temuan di gambar menggunakan referensi dari [CONTEXT DATA].
-       - Jangan gunakan pengetahuan umum jika di data context sudah ada penjelasannya.
+    SUMBER PENGETAHUAN ANDA:
+    1. TEKS AL-QUR'AN (Hafalan Internal): Anda memiliki akses penuh ke hafalan 30 Juz Al-Qur'an.
+    2. ILMU TAJWID (Context Data): Gunakan HANYA [CONTEXT DATA] di bawah ini untuk definisi, dalil, dan cara baca hukum tajwidnya.
+    
+    INSTRUKSI MENJAWAB:
+    - Jawablah dengan ramah selayaknya Ustadz.
+    - JANGAN menampilkan ID referensi (contoh: ID YmBdjT...) dalam jawaban.
+    - Jika ada gambar: Analisis teks Arab di gambar -> Identifikasi Ayatnya -> Analisis Hukum Tajwidnya berdasarkan [CONTEXT DATA].
+    - Jawablah dengan bahasa mengalir selayaknya Ustadz mengajar santri.
 
     [CONTEXT DATA MULAI]
     ${knowledgeContext}
     [CONTEXT DATA SELESAI]
   `;
 
-  const finalPrompt = systemPrompt + "\n\n" + "PERTANYAAN USER: " + (question || "Jelaskan gambar ini sesuai materi yang ada.");
+  const finalPrompt = systemPrompt + "\n\n" + "PERTANYAAN USER: " + (question || "Jelaskan hukum tajwid pada gambar ini.");
 
   const parts = [{ text: finalPrompt }];
   
-  // Jika ada gambar, tambahkan ke payload
   if (imageData) {
       parts.push({
           inlineData: {
@@ -321,8 +321,8 @@ const ChatInterface = ({ knowledgeList }) => {
     e.preventDefault();
     if (!input.trim() && !selectedImage) return;
 
-    const userText = input.trim() ? input : (selectedImage ? "Mohon analisis gambar ini sesuai database." : "");
-    const userMsg = { id: Date.now(), role: 'user', text: userText, imagePreview: imagePreview }; // Store preview locally
+    const userText = input.trim() ? input : (selectedImage ? "Mohon analisis gambar ini." : "");
+    const userMsg = { id: Date.now(), role: 'user', text: userText, imagePreview: imagePreview }; 
     
     const chatHistory = messages.slice(-5).map(m => `${m.role === 'user' ? 'USER' : 'USTADZ'}: ${m.text}`).join('\n');
     setMessages(prev => [...prev, userMsg]); setInput(''); setIsTyping(true);
@@ -339,9 +339,10 @@ const ChatInterface = ({ knowledgeList }) => {
         } catch (err) { alert("Gagal proses gambar."); setIsTyping(false); clearImageSelection(); return; }
     }
 
-    const knowledgeContext = knowledgeList.map(item => `ID: ${item.id}\nMATERI: ${item.title}\nKATEGORI: ${item.category}\nSUMBER KITAB: ${item.source || 'Tidak disebutkan'}\nPENJELASAN: ${item.content}\nKEYWORD: ${item.tags.join(', ')}\n${item.audioData ? `[AUDIO_ID: ${item.id}]` : '[NO_AUDIO]'}\n---`).join('\n');
+    // Format Context agar rapi
+    const knowledgeContext = knowledgeList.map(item => `MATERI: ${item.title}\nKATEGORI: ${item.category}\nSUMBER: ${item.source || 'Tidak disebutkan'}\nPENJELASAN: ${item.content}\n${item.audioData ? `[AUDIO_ID: ${item.id}]` : ''}\n---`).join('\n');
     
-    const answer = await askGemini(userMsg.text, `RIWAYAT:\n${chatHistory}\nDATABASE:\n${knowledgeContext}`, imageDataForAI);
+    const answer = await askGemini(userMsg.text, knowledgeContext, imageDataForAI);
     
     setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ai', text: answer }]);
     setIsTyping(false);
@@ -407,13 +408,13 @@ const ChatInterface = ({ knowledgeList }) => {
         )}
 
         <form onSubmit={handleSend} className="relative flex items-center gap-2">
-          {/* Input File Tersembunyi */}
-          <input type="file" accept="image/*" capture="environment" ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
+          {/* Input File Tersembunyi (Single Input for All) */}
+          <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
 
-          {/* Tombol Kamera & Suara */}
+          {/* Tombol Kamera/Galeri & Suara */}
           <div className="flex gap-1 shrink-0">
-             <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 sm:p-3.5 rounded-full border shadow-sm bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-teal-600 transition" title="Kirim Gambar"><Icons.Camera size={20} /></button>
-             <button type="button" onClick={handleVoiceInput} className={`p-3 sm:p-3.5 rounded-full transition-all duration-200 border flex items-center justify-center shadow-sm ${isListening ? 'bg-red-500 text-white border-red-500 animate-pulse' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-teal-600'}`} title="Tekan untuk bicara">{isListening ? <Icons.MicOff size={20} /> : <Icons.Mic size={20} />}</button>
+             <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 sm:p-3.5 rounded-full border shadow-sm bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-teal-600 transition" title="Kirim Gambar/Foto"><Icons.Camera size={20} /></button>
+             <button type="button" onClick={handleVoiceInput} className={`p-3 sm:p-3.5 rounded-full transition-all duration-200 border flex items-center justify-center shadow-sm ${isListening ? 'bg-red-500 text-white border-red-500 animate-pulse' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-teal-600'}`} title="Rekam Suara">{isListening ? <Icons.MicOff size={20} /> : <Icons.Mic size={20} />}</button>
           </div>
 
           <input type="text" className="w-full px-4 sm:px-5 py-3 sm:py-3.5 bg-slate-50 border border-slate-200 rounded-full focus:ring-2 focus:ring-teal-100 focus:border-teal-400 outline-none transition text-slate-700 placeholder:text-slate-400 text-sm sm:text-base" placeholder={selectedImage ? "Tambahkan keterangan gambar..." : "Tanya Ustadz..."} value={input} onChange={(e) => setInput(e.target.value)} disabled={isTyping} />
@@ -424,7 +425,7 @@ const ChatInterface = ({ knowledgeList }) => {
   );
 };
 
-// --- ADMIN VIEW (DIKEMBALIKAN KE VERSI LENGKAP YANG ANDA SUKA) ---
+// --- ADMIN VIEW: Upload & Input ---
 const AdminPanel = ({ knowledgeList, user, collectionPath }) => {
   const [view, setView] = useState('list');
   const [formData, setFormData] = useState({ title: '', category: '', content: '', tags: '', source: '', audioData: '' });
@@ -439,71 +440,384 @@ const AdminPanel = ({ knowledgeList, user, collectionPath }) => {
   const fileInputRef = useRef(null);
   const audioInputRef = useRef(null);
 
+// --- LANGKAH A: TARUH DI SINI ---
   const existingSources = useMemo(() => {
-    const sources = knowledgeList.map(item => item.source).filter(source => source && source.trim() !== "");
+    const sources = knowledgeList
+      .map(item => item.source)
+      .filter(source => source && source.trim() !== "");
     return [...new Set(sources)]; 
   }, [knowledgeList]);
 
-  const handleCreateNew = () => { setEditingId(null); setFormData({ title: '', category: '', content: '', tags: '', source: '', audioData: '' }); setView('form'); };
-  const handleEdit = (item) => { setEditingId(item.id); setFormData({ title: item.title, category: item.category, content: item.content, tags: item.tags ? item.tags.join(', ') : '', source: item.source || '', audioData: item.audioData || '' }); setView('form'); };
-  const handleDelete = async (id) => { if (window.confirm('Hapus materi ini?')) { try { await deleteDoc(doc(db, ...collectionPath, id)); } catch (error) { console.error("Error deleting:", error); } } };
+  const handleCreateNew = () => {
+    setEditingId(null);
+    setFormData({ title: '', category: '', content: '', tags: '', source: '', audioData: '' });
+    setView('form');
+  };
 
-  const handleAudioUpload = (e) => { const file = e.target.files[0]; if (!file) return; if (file.size > 500000) { alert("Ukuran file audio terlalu besar (Maks 500KB)."); return; } const reader = new FileReader(); reader.onload = (event) => setFormData(prev => ({ ...prev, audioData: event.target.result })); reader.readAsDataURL(file); };
+  const handleEdit = (item) => {
+    setEditingId(item.id);
+    setFormData({
+      title: item.title,
+      category: item.category,
+      content: item.content,
+      tags: item.tags ? item.tags.join(', ') : '',
+      source: item.source || '',
+      audioData: item.audioData || ''
+    });
+    setView('form');
+  };
 
-  const startRecording = async () => { try { const stream = await navigator.mediaDevices.getUserMedia({ audio: true }); mediaRecorderRef.current = new MediaRecorder(stream); const chunks = []; mediaRecorderRef.current.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); }; mediaRecorderRef.current.onstop = () => { const blob = new Blob(chunks, { type: 'audio/webm' }); if (blob.size > 500000) { alert("Rekaman terlalu besar."); return; } const reader = new FileReader(); reader.onloadend = () => setFormData(prev => ({ ...prev, audioData: reader.result })); reader.readAsDataURL(blob); stream.getTracks().forEach(track => track.stop()); }; mediaRecorderRef.current.start(); setIsRecording(true); } catch (err) { console.error("Mic Error:", err); alert("Gagal mengakses mikrofon."); } };
-  const stopRecording = () => { if (mediaRecorderRef.current && isRecording) { mediaRecorderRef.current.stop(); setIsRecording(false); } };
+  const handleDelete = async (id) => {
+    if (window.confirm('Hapus materi ini?')) {
+      try {
+        await deleteDoc(doc(db, ...collectionPath, id));
+      } catch (error) {
+        console.error("Error deleting:", error);
+      }
+    }
+  };
+
+  const handleAudioUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    if (file.size > 500000) { 
+      alert("Ukuran file audio terlalu besar (Maks 500KB). Mohon gunakan durasi pendek.");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (event) => setFormData(prev => ({ ...prev, audioData: event.target.result }));
+    reader.readAsDataURL(file);
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorderRef.current = new MediaRecorder(stream);
+      const chunks = [];
+      mediaRecorderRef.current.ondataavailable = (e) => { if (e.data.size > 0) chunks.push(e.data); };
+      mediaRecorderRef.current.onstop = () => {
+        const blob = new Blob(chunks, { type: 'audio/webm' });
+        if (blob.size > 500000) { alert("Rekaman terlalu besar."); return; }
+        const reader = new FileReader();
+        reader.onloadend = () => setFormData(prev => ({ ...prev, audioData: reader.result }));
+        reader.readAsDataURL(blob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+      mediaRecorderRef.current.start();
+      setIsRecording(true);
+    } catch (err) {
+      console.error("Mic Error:", err);
+      alert("Gagal mengakses mikrofon.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop();
+      setIsRecording(false);
+    }
+  };
+
   const deleteAudio = () => setFormData(prev => ({ ...prev, audioData: '' }));
 
   const processFile = async (file) => {
-    if (!file) return; setIsAnalyzingImage(true); const reader = new FileReader();
+    if (!file) return;
+    setIsAnalyzingImage(true);
+
+    const reader = new FileReader();
     reader.onload = async (event) => {
       try {
         let textToProcess = "";
-        if (file.type.startsWith('image/')) { const base64Data = event.target.result.split(',')[1]; textToProcess = await extractTextFromImage(base64Data, file.type); } else { textToProcess = event.target.result; }
+        
+        // 1. Ambil teks dasar (OCR jika gambar, teks jika file md/txt)
+        if (file.type.startsWith('image/')) {
+          const base64Data = event.target.result.split(',')[1];
+          textToProcess = await extractTextFromImage(base64Data, file.type);
+        } else {
+          textToProcess = event.target.result;
+        }
+
         if (!textToProcess) throw new Error("Teks kosong");
+
+        // 2. Gunakan Gemini 2.5 Flash untuk Analisis Auto-Fill
         const cleanKey = apiKey ? apiKey.trim() : "";
-        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${cleanKey}`;
-        const prompt = `Analisis teks Tajwid ini. Berikan HANYA JSON murni: { "judul": "...", "kategori": "...", "tags": "...", "konten": "..." }. Teks: ${textToProcess}`;
-        const aiResponse = await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] }) });
-        const aiData = await aiResponse.json(); const result = JSON.parse(aiData.candidates?.[0]?.content?.parts?.[0]?.text.replace(/```json|```/g, "").trim() || "{}");
-        setFormData(prev => ({ ...prev, title: result.judul || "Materi Baru", category: result.kategori || "", tags: result.tags || "", content: result.konten || textToProcess }));
-      } catch (err) { console.error("Auto-fill error:", err); alert("Gagal mengisi otomatis."); setFormData(prev => ({ ...prev, content: prev.content ? prev.content + "\n\n" + (event.target.result) : event.target.result })); } finally { setIsAnalyzingImage(false); }
+        const targetModel = "gemini-2.5-flash"; 
+        const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`;
+        
+        const prompt = `Analisis teks Tajwid ini. Berikan HANYA JSON murni tanpa kata-kata lain.
+          Pilihan Kategori: Hukum Nun Mati & Tanwin, Hukum Mim Mati, Hukum Mad, Hukum Idgham, Qalqalah, Makharijul Huruf, Sifat Huruf, Waqaf & Ibtida.
+          JSON:
+          {
+            "judul": "judul materi",
+            "kategori": "pilih satu dari daftar di atas",
+            "tags": "3 kata kunci",
+            "konten": "transkripsi lengkap"
+          }
+          Teks: ${textToProcess}`;
+
+        const aiResponse = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ contents: [{ parts: [{ text: prompt }] }] })
+        });
+
+        const aiData = await aiResponse.json();
+        const rawJson = aiData.candidates?.[0]?.content?.parts?.[0]?.text || "";
+        const cleanJson = rawJson.replace(/```json|```/g, "").trim();
+        const result = JSON.parse(cleanJson);
+
+        // 3. Masukkan ke Form secara Otomatis
+        setFormData(prev => ({
+          ...prev,
+          title: result.judul || "Materi Baru",
+          category: result.kategori || "",
+          tags: result.tags || "",
+          content: result.konten || textToProcess
+        }));
+
+      } catch (err) {
+        console.error("Auto-fill error:", err);
+        alert("Gagal mengisi otomatis, teks dimasukkan manual ke kolom konten.");
+        setFormData(prev => ({
+          ...prev,
+          content: prev.content ? prev.content + "\n\n" + (event.target.result) : "Gagal Auto-fill"
+        }));
+      } finally {
+        setIsAnalyzingImage(false);
+      }
     };
-    if (file.type.startsWith('image/')) { reader.readAsDataURL(file); } else { reader.readAsText(file); }
+
+    if (file.type.startsWith('image/')) {
+      reader.readAsDataURL(file);
+    } else {
+      reader.readAsText(file);
+    }
   };
 
-  const handleDrag = (e) => { e.preventDefault(); e.stopPropagation(); if (e.type === "dragenter" || e.type === "dragover") setDragActive(true); else if (e.type === "dragleave") setDragActive(false); };
-  const handleDrop = (e) => { e.preventDefault(); e.stopPropagation(); setDragActive(false); if (e.dataTransfer.files && e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]); };
-  const handlePaste = (e) => { const items = e.clipboardData.items; for (const item of items) { if (item.type.indexOf("image") !== -1) { processFile(item.getAsFile()); } } };
 
-  const handleSubmit = async (e) => { e.preventDefault(); if (!user) return; setIsSubmitting(true); try { const dataToSave = { ...formData, tags: formData.tags.split(',').map(t => t.trim()).filter(t => t), updatedAt: serverTimestamp(), }; if (editingId) { await updateDoc(doc(db, ...collectionPath, editingId), dataToSave); } else { await addDoc(collection(db, ...collectionPath), { ...dataToSave, createdAt: serverTimestamp() }); } setView('list'); setEditingId(null); setFormData({ title: '', category: '', content: '', tags: '', source: '', audioData: '' }); } catch (error) { console.error("Error saving:", error); alert("Gagal menyimpan data."); } finally { setIsSubmitting(false); } };
+  const handleDrag = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    if (e.type === "dragenter" || e.type === "dragover") setDragActive(true);
+    else if (e.type === "dragleave") setDragActive(false);
+  };
 
-  const filteredList = useMemo(() => { return knowledgeList.filter(item => item.title.toLowerCase().includes(searchTerm.toLowerCase()) || item.category.toLowerCase().includes(searchTerm.toLowerCase())); }, [knowledgeList, searchTerm]);
+  const handleDrop = (e) => {
+    e.preventDefault(); e.stopPropagation();
+    setDragActive(false);
+    if (e.dataTransfer.files && e.dataTransfer.files[0]) processFile(e.dataTransfer.files[0]);
+  };
+
+  const handleChangeFile = (e) => {
+    if (e.target.files && e.target.files[0]) processFile(e.target.files[0]);
+  };
+
+  const handlePaste = (e) => {
+    const items = e.clipboardData.items;
+    for (const item of items) {
+      if (item.type.indexOf("image") !== -1) {
+        const blob = item.getAsFile();
+        processFile(blob);
+      }
+    }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!user) return;
+    setIsSubmitting(true);
+    try {
+      const dataToSave = {
+        ...formData,
+        tags: formData.tags.split(',').map(t => t.trim()).filter(t => t), 
+        updatedAt: serverTimestamp(),
+      };
+      if (editingId) {
+        await updateDoc(doc(db, ...collectionPath, editingId), dataToSave);
+      } else {
+        await addDoc(collection(db, ...collectionPath), { ...dataToSave, createdAt: serverTimestamp() });
+      }
+      setView('list'); setEditingId(null);
+      setFormData({ title: '', category: '', content: '', tags: '', source: '', audioData: '' });
+    } catch (error) {
+      console.error("Error saving:", error);
+      alert("Gagal menyimpan data.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  const filteredList = useMemo(() => {
+    return knowledgeList.filter(item => 
+      item.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      item.category.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+  }, [knowledgeList, searchTerm]);
 
   if (view === 'form') {
     return (
       <div className="max-w-4xl mx-auto animate-in fade-in slide-in-from-bottom-4 duration-300" onPaste={handlePaste}>
-        <div className="flex items-center mb-6"><button onClick={() => setView('list')} className="mr-3 sm:mr-4 p-2 rounded-full hover:bg-slate-200 text-slate-600 transition"><Icons.ArrowLeft size={24} /></button><h2 className="text-xl sm:text-2xl font-bold text-slate-800">{editingId ? 'Edit Materi' : 'Input Baru'}</h2></div>
-        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden"><div className="p-4 sm:p-8 space-y-6">
-            {!editingId && (<div className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-colors cursor-pointer ${dragActive ? 'border-teal-500 bg-teal-50' : 'border-slate-300 hover:border-teal-400 hover:bg-teal-50'}`} onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop} onClick={() => fileInputRef.current?.click()}>
-                {isAnalyzingImage ? (<div className="flex flex-col items-center text-teal-600 animate-pulse"><Icons.Loader size={32} className="animate-spin mb-2" /><p className="font-medium mt-2 text-sm">Sedang memproses gambar...</p></div>) : (<><div className="flex justify-center gap-4 mb-3 text-slate-400"><Icons.File size={32} /></div><p className="text-slate-700 font-medium mb-1 text-sm sm:text-base">Upload Dokumen / Gambar</p><p className="text-xs text-slate-500 mb-4">Paste gambar atau Drag & Drop file di sini</p><input type="file" ref={fileInputRef} onChange={(e) => processFile(e.target.files[0])} className="hidden" accept=".txt,.md,.png,.jpg,.jpeg,.webp" /><button type="button" className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs sm:text-sm hover:bg-slate-100 transition shadow-sm">Pilih File Manual</button></>)}</div>)}
+        <div className="flex items-center mb-6">
+          <button onClick={() => setView('list')} className="mr-3 sm:mr-4 p-2 rounded-full hover:bg-slate-200 text-slate-600 transition">
+            <Icons.ArrowLeft size={24} />
+          </button>
+          <h2 className="text-xl sm:text-2xl font-bold text-slate-800">{editingId ? 'Edit Materi' : 'Input Baru'}</h2>
+        </div>
+
+        <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
+          <div className="p-4 sm:p-8 space-y-6">
+            {!editingId && (
+              <div 
+                className={`border-2 border-dashed rounded-xl p-6 sm:p-8 text-center transition-colors cursor-pointer ${dragActive ? 'border-teal-500 bg-teal-50' : 'border-slate-300 hover:border-teal-400 hover:bg-teal-50'}`}
+                onDragEnter={handleDrag} onDragLeave={handleDrag} onDragOver={handleDrag} onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                {isAnalyzingImage ? (
+                  <div className="flex flex-col items-center text-teal-600 animate-pulse">
+                    <Icons.Loader size={32} className="animate-spin mb-2" />
+                    <p className="font-medium mt-2 text-sm">Sedang memproses gambar...</p>
+                  </div>
+                ) : (
+                  <>
+                    <div className="flex justify-center gap-4 mb-3 text-slate-400"><Icons.File size={32} /></div>
+                    <p className="text-slate-700 font-medium mb-1 text-sm sm:text-base">Upload Dokumen / Gambar</p>
+                    <p className="text-xs text-slate-500 mb-4">Paste gambar atau Drag & Drop file di sini</p>
+                    <input type="file" ref={fileInputRef} onChange={handleChangeFile} className="hidden" accept=".txt,.md,.png,.jpg,.jpeg,.webp" />
+                    <button type="button" className="px-4 py-2 bg-white border border-slate-300 text-slate-700 rounded-lg text-xs sm:text-sm hover:bg-slate-100 transition shadow-sm">Pilih File Manual</button>
+                  </>
+                )}
+              </div>
+            )}
+
             <div className="space-y-4">
-              <div><label className="block text-sm font-semibold text-slate-700 mb-1">Judul Materi</label><input type="text" required className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 focus:border-teal-500 outline-none transition" placeholder="Contoh: Hukum Ikhfa Syafawi" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} /></div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4"><div><label className="block text-sm font-semibold text-slate-700 mb-1">Kategori</label><div className="relative"><select className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 focus:border-teal-500 outline-none bg-white text-sm" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} required><option value="">Pilih Kategori...</option><option value="Hukum Nun Mati & Tanwin">Hukum Nun Mati & Tanwin</option><option value="Hukum Mim Mati">Hukum Mim Mati</option><option value="Hukum Mad">Hukum Mad</option><option value="Hukum Idgham">Hukum Idgham</option><option value="Qalqalah">Qalqalah</option><option value="Makharijul Huruf">Makharijul Huruf</option><option value="Sifat Huruf">Sifat Huruf</option><option value="Waqaf & Ibtida">Waqaf & Ibtida</option><option value="Lainnya">Lainnya</option></select></div></div><div><label className="block text-sm font-semibold text-slate-700 mb-1">Tags</label><input type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 focus:border-teal-500 outline-none transition text-sm" placeholder="syafawi, mim mati" value={formData.tags} onChange={(e) => setFormData({...formData, tags: e.target.value})} /></div></div>
-              <div><label className="block text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2"><Icons.Book size={14} className="text-teal-600"/> Sumber Kitab</label><input type="text" list="list-sumber" className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 outline-none text-sm" placeholder="Ketik atau pilih sumber..." value={formData.source} onChange={(e) => setFormData({...formData, source: e.target.value})} /><datalist id="list-sumber">{existingSources.map((src, index) => (<option key={index} value={src} />))}</datalist></div>
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4"><label className="block text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2"><Icons.Mic size={14} className="text-teal-600"/> <span className="ml-1">Audio Contoh (Opsional)</span></label>{!formData.audioData ? (<div className="flex flex-col sm:flex-row gap-3"><button type="button" onClick={isRecording ? stopRecording : startRecording} className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition ${isRecording ? 'bg-red-100 text-red-600 border border-red-200 animate-pulse' : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'}`}>{isRecording ? <><Icons.Stop size={16} /> Stop</> : <><Icons.Mic size={16}/> Rekam</>}</button><div className="flex-1"><input type="file" accept="audio/*" ref={audioInputRef} className="hidden" onChange={handleAudioUpload} /><button type="button" onClick={() => audioInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white border border-slate-300 text-slate-700 font-medium text-sm hover:bg-slate-50 transition"><Icons.Upload size={16} /> Upload Audio</button></div></div>) : (<div className="flex items-center justify-between bg-white p-2 rounded-lg border border-teal-200"><div className="flex items-center gap-2 w-full"><div className="bg-teal-100 p-1.5 rounded-full text-teal-600"><Icons.Mic size={16} /></div><audio controls src={formData.audioData} className="w-full h-8" /></div><button onClick={deleteAudio} className="ml-2 p-2 text-slate-400 hover:text-red-500 transition" title="Hapus"><Icons.Trash2 size={16} /></button></div>)}</div>
-              <div><label className="block text-sm font-semibold text-slate-700 mb-1">Konten</label><textarea required className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 focus:border-teal-500 outline-none transition min-h-[200px] text-slate-700 leading-relaxed font-mono text-sm" placeholder="Isi materi..." value={formData.content} onChange={(e) => setFormData({...formData, content: e.target.value})} /></div>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Judul Materi</label>
+                <input type="text" required className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 focus:border-teal-500 outline-none transition" placeholder="Contoh: Hukum Ikhfa Syafawi" value={formData.title} onChange={(e) => setFormData({...formData, title: e.target.value})} />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Kategori</label>
+                  <div className="relative">
+                    <select className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 focus:border-teal-500 outline-none bg-white text-sm" value={formData.category} onChange={(e) => setFormData({...formData, category: e.target.value})} required>
+                      <option value="">Pilih Kategori...</option>
+                      <option value="Hukum Nun Mati & Tanwin">Hukum Nun Mati & Tanwin</option>
+                      <option value="Hukum Mim Mati">Hukum Mim Mati</option>
+                      <option value="Hukum Mad">Hukum Mad</option>
+                      <option value="Hukum Idgham">Hukum Idgham</option>
+                      <option value="Qalqalah">Qalqalah</option>
+                      <option value="Makharijul Huruf">Makharijul Huruf</option>
+                      <option value="Sifat Huruf">Sifat Huruf</option>
+                      <option value="Waqaf & Ibtida">Waqaf & Ibtida</option>
+                      <option value="Lainnya">Lainnya</option>
+                    </select>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1">Tags</label>
+                  <input type="text" className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 focus:border-teal-500 outline-none transition text-sm" placeholder="syafawi, mim mati" value={formData.tags} onChange={(e) => setFormData({...formData, tags: e.target.value})} />
+                </div>
+              </div>
+
+              <div>
+  <label className="block text-sm font-semibold text-slate-700 mb-1 flex items-center gap-2">
+    <Icons.Book size={14} className="text-teal-600"/> Sumber Kitab
+  </label>
+  <input 
+    type="text" 
+    list="list-sumber" 
+    className="w-full px-4 py-2.5 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 outline-none text-sm" 
+    placeholder="Ketik atau pilih sumber..." 
+    value={formData.source} 
+    onChange={(e) => setFormData({...formData, source: e.target.value})} 
+  />
+  <datalist id="list-sumber">
+    {existingSources.map((src, index) => (
+      <option key={index} value={src} />
+    ))}
+  </datalist>
+</div>
+
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-4">
+                <label className="block text-sm font-semibold text-slate-700 mb-3 flex items-center gap-2"><Icons.Mic size={14} className="text-teal-600"/> <span className="ml-1">Audio Contoh (Opsional)</span></label>
+                {!formData.audioData ? (
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <button type="button" onClick={isRecording ? stopRecording : startRecording} className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg font-medium text-sm transition ${isRecording ? 'bg-red-100 text-red-600 border border-red-200 animate-pulse' : 'bg-white border border-slate-300 text-slate-700 hover:bg-slate-50'}`}>
+                      {isRecording ? <><Icons.Stop size={16} /> Stop</> : <><Icons.Mic size={16}/> Rekam</>}</button>
+                    <div className="flex-1">
+                      <input type="file" accept="audio/*" ref={audioInputRef} className="hidden" onChange={handleAudioUpload} />
+                      <button type="button" onClick={() => audioInputRef.current?.click()} className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg bg-white border border-slate-300 text-slate-700 font-medium text-sm hover:bg-slate-50 transition"><Icons.Upload size={16} /> Upload Audio</button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-teal-200">
+                    <div className="flex items-center gap-2 w-full"><div className="bg-teal-100 p-1.5 rounded-full text-teal-600"><Icons.Mic size={16} /></div><audio controls src={formData.audioData} className="w-full h-8" /></div>
+                    <button onClick={deleteAudio} className="ml-2 p-2 text-slate-400 hover:text-red-500 transition" title="Hapus"><Icons.Trash2 size={16} /></button>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1">Konten</label>
+                <textarea required className="w-full px-4 py-3 rounded-xl border border-slate-300 focus:ring-4 focus:ring-teal-100 focus:border-teal-500 outline-none transition min-h-[200px] text-slate-700 leading-relaxed font-mono text-sm" placeholder="Isi materi..." value={formData.content} onChange={(e) => setFormData({...formData, content: e.target.value})} />
+              </div>
             </div>
           </div>
-          <div className="bg-slate-50 px-4 py-4 sm:px-8 sm:py-5 border-t border-slate-200 flex flex-col-reverse sm:flex-row items-center justify-end gap-3 sticky bottom-0"><button onClick={() => setView('list')} className="w-full sm:w-auto px-6 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-white transition shadow-sm text-sm" type="button">Batal</button><button onClick={handleSubmit} disabled={isSubmitting || isAnalyzingImage || isRecording} className="w-full sm:w-auto px-8 py-2.5 rounded-lg bg-teal-600 text-white font-medium hover:bg-teal-700 transition shadow-md flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed text-sm">{isSubmitting ? <Icons.Loader size={18} /> : <Icons.Save size={18} />}{editingId ? 'Simpan Perubahan' : 'Simpan Materi'}</button></div></div></div>
+          <div className="bg-slate-50 px-4 py-4 sm:px-8 sm:py-5 border-t border-slate-200 flex flex-col-reverse sm:flex-row items-center justify-end gap-3 sticky bottom-0">
+            <button onClick={() => setView('list')} className="w-full sm:w-auto px-6 py-2.5 rounded-lg border border-slate-300 text-slate-700 font-medium hover:bg-white transition shadow-sm text-sm" type="button">Batal</button>
+            <button onClick={handleSubmit} disabled={isSubmitting || isAnalyzingImage || isRecording} className="w-full sm:w-auto px-8 py-2.5 rounded-lg bg-teal-600 text-white font-medium hover:bg-teal-700 transition shadow-md flex items-center justify-center gap-2 disabled:opacity-70 disabled:cursor-not-allowed text-sm">
+              {isSubmitting ? <Icons.Loader size={18} /> : <Icons.Save size={18} />}
+              {editingId ? 'Simpan Perubahan' : 'Simpan Materi'}
+            </button>
+          </div>
+        </div>
+      </div>
     );
   }
 
+  // List View (Default)
   return (
     <div className="max-w-6xl mx-auto space-y-6 animate-in fade-in duration-300">
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200"><div><h2 className="text-xl font-bold text-teal-900">Database Tajwid</h2><p className="text-slate-500 text-sm">Kelola materi pembelajaran AI.</p></div><button onClick={handleCreateNew} className="w-full sm:w-auto px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition hover:scale-[1.02] text-sm"><Icons.Plus size={18} /> Tambah Materi</button></div>
-      <div className="relative"><input type="text" placeholder="Cari materi..." className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-teal-50 focus:border-teal-300 outline-none transition shadow-sm text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} /><div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><Icons.Search size={18} /></div></div>
-      <div className="grid grid-cols-1 gap-3">{filteredList.length === 0 ? (<div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300"><div className="bg-teal-50 w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3"><Icons.Book className="text-teal-400" size={28} /></div><h3 className="text-base font-medium text-slate-900">Belum ada materi</h3><p className="text-slate-500 text-sm mb-4">Silakan input data baru.</p></div>) : (filteredList.map(item => (<div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition group"><div className="flex flex-col sm:flex-row justify-between items-start gap-4"><div className="space-y-1.5 flex-1 w-full"><div className="flex items-center gap-2 flex-wrap"><span className="bg-teal-50 text-teal-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border border-teal-100">{item.category}</span>{item.source && <span className="flex items-center bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[10px] border border-amber-100"><Icons.Book size={10} className="mr-1"/> {item.source}</span>}{item.audioData && <span className="flex items-center bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] border border-blue-100"><Icons.Mic size={10} className="mr-1"/> Audio</span>}</div><h3 className="text-base font-bold text-slate-800 leading-tight">{item.title}</h3><p className="text-slate-600 text-xs line-clamp-2">{item.content}</p>{item.tags && item.tags.length > 0 && <div className="flex items-center gap-2 mt-1"><Icons.Tag size={12} className="text-slate-400" /><span className="text-xs text-slate-500 truncate">{item.tags.join(', ')}</span></div>}</div><div className="flex sm:flex-col gap-2 w-full sm:w-auto mt-2 sm:mt-0"><button onClick={() => handleEdit(item)} className="flex-1 sm:flex-none p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition border border-slate-200 sm:border-transparent flex justify-center items-center"><Icons.Edit size={16} /></button><button onClick={() => handleDelete(item.id)} className="flex-1 sm:flex-none p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition border border-slate-200 sm:border-transparent flex justify-center items-center"><Icons.Trash2 size={16} /></button></div></div></div>)))}</div></div>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 rounded-2xl shadow-sm border border-slate-200">
+        <div><h2 className="text-xl font-bold text-teal-900">Database Tajwid</h2><p className="text-slate-500 text-sm">Kelola materi pembelajaran AI.</p></div>
+        <button onClick={handleCreateNew} className="w-full sm:w-auto px-6 py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-semibold shadow-md flex items-center justify-center gap-2 transition hover:scale-[1.02] text-sm"><Icons.Plus size={18} /> Tambah Materi</button>
+      </div>
+
+      <div className="relative">
+        <input type="text" placeholder="Cari materi..." className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-200 focus:ring-4 focus:ring-teal-50 focus:border-teal-300 outline-none transition shadow-sm text-sm" value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} />
+        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 text-slate-400"><Icons.Search size={18} /></div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3">
+        {filteredList.length === 0 ? (
+          <div className="text-center py-20 bg-white rounded-2xl border border-dashed border-slate-300">
+            <div className="bg-teal-50 w-14 h-14 rounded-full flex items-center justify-center mx-auto mb-3"><Icons.Book className="text-teal-400" size={28} /></div>
+            <h3 className="text-base font-medium text-slate-900">Belum ada materi</h3>
+            <p className="text-slate-500 text-sm mb-4">Silakan input data baru.</p>
+          </div>
+        ) : (
+          filteredList.map(item => (
+            <div key={item.id} className="bg-white p-4 rounded-xl shadow-sm border border-slate-200 hover:shadow-md transition group">
+              <div className="flex flex-col sm:flex-row justify-between items-start gap-4">
+                <div className="space-y-1.5 flex-1 w-full">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="bg-teal-50 text-teal-700 px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wide border border-teal-100">{item.category}</span>
+                    {item.source && <span className="flex items-center bg-amber-50 text-amber-700 px-2 py-0.5 rounded text-[10px] border border-amber-100"><Icons.Book size={10} className="mr-1"/> {item.source}</span>}
+                    {item.audioData && <span className="flex items-center bg-blue-50 text-blue-700 px-2 py-0.5 rounded text-[10px] border border-blue-100"><Icons.Mic size={10} className="mr-1"/> Audio</span>}
+                  </div>
+                  <h3 className="text-base font-bold text-slate-800 leading-tight">{item.title}</h3>
+                  <p className="text-slate-600 text-xs line-clamp-2">{item.content}</p>
+                  {item.tags && item.tags.length > 0 && <div className="flex items-center gap-2 mt-1"><Icons.Tag size={12} className="text-slate-400" /><span className="text-xs text-slate-500 truncate">{item.tags.join(', ')}</span></div>}
+                </div>
+                <div className="flex sm:flex-col gap-2 w-full sm:w-auto mt-2 sm:mt-0">
+                  <button onClick={() => handleEdit(item)} className="flex-1 sm:flex-none p-2 text-slate-500 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition border border-slate-200 sm:border-transparent flex justify-center items-center"><Icons.Edit size={16} /></button>
+                  <button onClick={() => handleDelete(item.id)} className="flex-1 sm:flex-none p-2 text-slate-500 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition border border-slate-200 sm:border-transparent flex justify-center items-center"><Icons.Trash2 size={16} /></button>
+                </div>
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
   );
 };
 
