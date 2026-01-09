@@ -256,7 +256,7 @@ const AdminLogin = ({ onClose }) => {
 
 // --- USER VIEW: Chat & Voice Interface ---
 const ChatInterface = ({ knowledgeList }) => {
-  const [messages, setMessages] = useState([{ id: 1, role: 'ai', text: 'Assalamu’alaikum. Saya Asisten Tajwid dari Markaz Qur\'an Darussalam. Silakan tanyakan hukum bacaan, minta contoh bacaan (Syeikh Ayman Suwaid), atau kirim foto ayat untuk dianalisis.' }]);
+  const [messages, setMessages] = useState([{ id: 1, role: 'ai', text: 'Assalamu’alaikum. Saya Asisten Tajwid dari Markaz Qur\'an Darussalam.\nSetiap jawaban saya merujuk pada referensi kitab para ulama yang tersimpan di database, bukan opini AI. Silakan tanyakan seputar tajwid, minta contoh bacaan (Syeikh Ayman Suwaid), atau kirim foto ayat untuk dianalisis.' }]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -273,8 +273,9 @@ const ChatInterface = ({ knowledgeList }) => {
     window.speechSynthesis.cancel();
     if (isSpeaking === msgId) { setIsSpeaking(null); return; }
     const cleanText = text.replace(/\[\[AUDIO:\s*[^\]]+\]\]/g, '')
-                          .replace(/\[\[RECITE:\s*[^\]]+\]\]/g, '') // Hapus tag Recite juga
-                          .replace(/\*\*/g, '').replace(/[\(\)]/g, '').trim();
+                      .replace(/\[\[RECITE:\s*[^\]]+\]\]/g, '') 
+                      .replace(/<strong>/g, '').replace(/<\/strong>/g, '') // Tambahkan ini
+                      .replace(/\*\*/g, '').replace(/[\(\)]/g, '').trim();
     if (!cleanText) return;
     const sentences = cleanText.match(/[^\.!\?]+[\.!\?]+/g) || [cleanText];
     let currentSentence = 0;
@@ -303,7 +304,11 @@ const ChatInterface = ({ knowledgeList }) => {
 
   const renderMessageContent = (text) => {
     // Split by AUDIO tag first
-    const parts = text.split(/(\[\[AUDIO:\s*[^\]]+\]\]|\[\[RECITE:\s*[^\]]+\]\])/g);
+    //const parts = text.split(/(\[\[AUDIO:\s*[^\]]+\]\]|\[\[RECITE:\s*[^\]]+\]\])/g);
+      const formattedText = text.replace(/<strong>/g, '**').replace(/<\/strong>/g, '**');
+  
+      const parts = formattedText.split(/(\[\[AUDIO:\s*[^\]]+\]\]|\[\[RECITE:\s*[^\]]+\]\])/g);
+
     
     return parts.map((part, index) => {
       // 1. Cek Admin Audio (Contoh Potongan)
@@ -352,33 +357,65 @@ const ChatInterface = ({ knowledgeList }) => {
 
   const handleSend = async (e) => {
     e.preventDefault();
-    if (!input.trim() && !selectedImage) return;
 
-    const userText = input.trim() ? input : (selectedImage ? "Mohon analisis gambar ini." : "");
-    const userMsg = { id: Date.now(), role: 'user', text: userText, imagePreview: imagePreview }; 
+    // 1. SIMPAN DATA KE VARIABEL LOKAL DULU
+    // (Penting: agar kita bisa langsung membersihkan UI tanpa kehilangan data yang mau dikirim)
+    const currentInput = input;
+    const currentImageFile = selectedImage;
+    const currentImagePreview = imagePreview;
+
+    // Cek validasi menggunakan variabel lokal
+    if (!currentInput.trim() && !currentImageFile) return;
+
+    // 2. LANGSUNG BERSIHKAN UI DI SINI (Supaya thumbnail & teks hilang seketika)
+    setInput('');
+    setSelectedImage(null);
+    setImagePreview(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
     
+    // 3. TAMPILKAN PESAN USER KE LAYAR (Pakai data dari variabel lokal)
+    const userText = currentInput.trim() ? currentInput : (currentImageFile ? "Mohon analisis gambar ini." : "");
+    const userMsg = { 
+        id: Date.now(), 
+        role: 'user', 
+        text: userText, 
+        imagePreview: currentImagePreview // Gunakan preview yg disimpan di lokal tadi
+    };
+    
+    // Siapkan riwayat untuk konteks AI
     const chatHistory = messages.slice(-5).map(m => `${m.role === 'user' ? 'USER' : 'USTADZ'}: ${m.text}`).join('\n');
-    setMessages(prev => [...prev, userMsg]); setInput(''); setIsTyping(true);
+    
+    setMessages(prev => [...prev, userMsg]); 
+    setIsTyping(true);
 
+    // 4. PROSES GAMBAR (Jika ada)
+    // Kita gunakan 'currentImageFile' bukan 'selectedImage' karena state sudah null
     let imageDataForAI = null;
-    if (selectedImage) {
+    if (currentImageFile) {
         try {
             imageDataForAI = await new Promise((resolve, reject) => {
                 const reader = new FileReader();
-                reader.onload = (event) => resolve({ base64: event.target.result.split(',')[1], mimeType: selectedImage.type });
+                reader.onload = (event) => resolve({ base64: event.target.result.split(',')[1], mimeType: currentImageFile.type });
                 reader.onerror = reject;
-                reader.readAsDataURL(selectedImage);
+                reader.readAsDataURL(currentImageFile);
             });
-        } catch (err) { alert("Gagal proses gambar."); setIsTyping(false); clearImageSelection(); return; }
+        } catch (err) { 
+            alert("Gagal proses gambar."); 
+            setIsTyping(false); 
+            return; 
+        }
     }
 
+    // 5. KIRIM KE AI
     const knowledgeContext = knowledgeList.map(item => `MATERI: ${item.title}\nKATEGORI: ${item.category}\nSUMBER: ${item.source || 'Tidak disebutkan'}\nPENJELASAN: ${item.content}\n${item.audioData ? `[AUDIO_ID: ${item.id}]` : ''}\n---`).join('\n');
     
-    const answer = await askGemini(userMsg.text, knowledgeContext, imageDataForAI);
+    // Pastikan prompt knowledge context ikut terkirim
+    const answer = await askGemini(userMsg.text, `RIWAYAT:\n${chatHistory}\nDATABASE:\n${knowledgeContext}`, imageDataForAI);
     
     setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ai', text: answer }]);
     setIsTyping(false);
-    clearImageSelection();
+    
+    // clearImageSelection(); // <-- INI DIHAPUS SAJA karena sudah dibersihkan di langkah no. 2
   };
 
   const handleVoiceInput = () => {
@@ -450,7 +487,7 @@ const ChatInterface = ({ knowledgeList }) => {
              <button type="button" onClick={handleVoiceInput} className={`p-3 sm:p-3.5 rounded-full transition-all duration-200 border flex items-center justify-center shadow-sm ${isListening ? 'bg-red-500 text-white border-red-500 animate-pulse' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-teal-600'}`} title="Rekam Suara">{isListening ? <Icons.MicOff size={20} /> : <Icons.Mic size={20} />}</button>
           </div>
 
-          <input type="text" className="w-full px-4 sm:px-5 py-3 sm:py-3.5 bg-slate-50 border border-slate-200 rounded-full focus:ring-2 focus:ring-teal-100 focus:border-teal-400 outline-none transition text-slate-700 placeholder:text-slate-400 text-sm sm:text-base" placeholder={selectedImage ? "Tambahkan keterangan gambar..." : "Tanya Ustadz..."} value={input} onChange={(e) => setInput(e.target.value)} disabled={isTyping} />
+          <input autoFocus type="text" className="w-full px-4 sm:px-5 py-3 sm:py-3.5 bg-slate-50 border border-slate-200 rounded-full focus:ring-2 focus:ring-teal-100 focus:border-teal-400 outline-none transition text-slate-700 placeholder:text-slate-400 text-sm sm:text-base" placeholder={selectedImage ? "Tambahkan keterangan gambar..." : "Tanya Ustadz..."} value={input} onChange={(e) => setInput(e.target.value)} disabled={isTyping} />
           <button type="submit" disabled={(!input.trim() && !selectedImage) || isTyping} className="absolute right-2 p-2 bg-teal-600 hover:bg-teal-700 text-white rounded-full transition disabled:opacity-50 shadow-md"><Icons.Send size={18} /></button>
         </form>
       </div>
