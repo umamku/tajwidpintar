@@ -5,7 +5,7 @@ import { initializeApp } from 'firebase/app';
 import { 
   getAuth, 
   signInAnonymously, 
-  onAuthStateChanged,
+  onAuthStateChanged, 
   signInWithEmailAndPassword,
   signOut
 } from 'firebase/auth';
@@ -66,7 +66,9 @@ const Icons = {
   EyeOff: (props) => (<IconWrapper {...props}><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></IconWrapper>),
   Copy: (props) => (<IconWrapper {...props}><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></IconWrapper>),
   Check: (props) => (<IconWrapper {...props}><polyline points="20 6 9 17 4 12"/></IconWrapper>),
-  Camera: (props) => (<IconWrapper {...props}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></IconWrapper>)
+  Camera: (props) => (<IconWrapper {...props}><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></IconWrapper>),
+  // Ikon Image (Galeri) tetap kita simpan, meskipun UI hanya pakai 1 tombol (Camera) yang fungsinya ganda
+  Image: (props) => (<IconWrapper {...props}><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></IconWrapper>)
 };
 
 // --- Configuration ---
@@ -88,7 +90,7 @@ const analytics = getAnalytics(app);
 const appId = 'tajwid-app-production';
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
-// --- Helper: Call Gemini API ---
+// --- Helper: Call Gemini API (Updated for Recitation) ---
 async function askGemini(question, knowledgeContext, imageData = null) {
   const cleanKey = apiKey ? apiKey.trim() : "";
   if (!cleanKey) return "Error: API Key kosong/salah.";
@@ -96,19 +98,24 @@ async function askGemini(question, knowledgeContext, imageData = null) {
   const targetModel = "gemini-2.5-flash"; 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`;
 
-  // PROMPT AGAR JAWABAN NATURAL & MENGGUNAKAN DATA
+  // --- PROMPT BARU: INTEGRASI SYEIKH AYMAN ---
   const systemPrompt = `
     Anda adalah Asisten Ustadz dalam bidang Ilmu Tajwid Al-Qur'an dari Markaz Qur'an Darussalam.
     
-    SUMBER PENGETAHUAN ANDA:
-    1. TEKS AL-QUR'AN (Hafalan Internal): Anda memiliki akses penuh ke hafalan 30 Juz Al-Qur'an.
-    2. ILMU TAJWID (Context Data): Gunakan HANYA [CONTEXT DATA] di bawah ini untuk definisi, dalil, dan cara baca hukum tajwidnya.
+    SUMBER PENGETAHUAN:
+    1. TEKS AL-QUR'AN (Hafalan Internal): Gunakan untuk identifikasi ayat.
+    2. ILMU TAJWID (Context Data): Gunakan untuk hukum tajwid.
     
-    INSTRUKSI MENJAWAB:
+    INSTRUKSI AUDIO (SYEIKH AYMAN RUSHDI SUWAID):
+    - Jika user meminta membacakan ayat, ATAU jika kamu membahas/mengidentifikasi ayat tertentu dari gambar/pertanyaan, lampirkan tag khusus di akhir jawaban:
+      [[RECITE:NomorSurat:NomorAyat]]
+    - Contoh: Untuk Al-Fatihah ayat 1, tulis [[RECITE:1:1]].
+    - Jika ayatnya banyak, boleh lampirkan beberapa tag.
+    
+    INSTRUKSI UMUM:
     - Jawablah dengan ramah selayaknya Ustadz.
-    - JANGAN menampilkan ID referensi (contoh: ID YmBdjT...) dalam jawaban.
-    - Jika ada gambar: Analisis teks Arab di gambar -> Identifikasi Ayatnya -> Analisis Hukum Tajwidnya berdasarkan [CONTEXT DATA].
-    - Jawablah dengan bahasa mengalir selayaknya Ustadz mengajar santri.
+    - JANGAN menampilkan ID referensi database.
+    - Jika ada gambar: Analisis teksnya, sebutkan Nama Surat & Ayatnya, lalu analisis tajwidnya.
 
     [CONTEXT DATA MULAI]
     ${knowledgeContext}
@@ -249,7 +256,7 @@ const AdminLogin = ({ onClose }) => {
 
 // --- USER VIEW: Chat & Voice Interface ---
 const ChatInterface = ({ knowledgeList }) => {
-  const [messages, setMessages] = useState([{ id: 1, role: 'ai', text: 'Assalamu’alaikum. Saya Asisten Tajwid dari Markaz Qur\'an Darussalam. Silakan tanyakan hukum bacaan, minta contoh bacaan, atau kirim foto untuk dianalisis.' }]);
+  const [messages, setMessages] = useState([{ id: 1, role: 'ai', text: 'Assalamu’alaikum. Saya Asisten Tajwid dari Markaz Qur\'an Darussalam. Silakan tanyakan hukum bacaan, minta contoh bacaan (Syeikh Ayman Suwaid), atau kirim foto ayat untuk dianalisis.' }]);
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isListening, setIsListening] = useState(false);
@@ -265,7 +272,9 @@ const ChatInterface = ({ knowledgeList }) => {
   const speak = (text, msgId) => {
     window.speechSynthesis.cancel();
     if (isSpeaking === msgId) { setIsSpeaking(null); return; }
-    const cleanText = text.replace(/\[\[AUDIO:\s*[^\]]+\]\]/g, '').replace(/\*\*/g, '').replace(/[\(\)]/g, '').trim();
+    const cleanText = text.replace(/\[\[AUDIO:\s*[^\]]+\]\]/g, '')
+                          .replace(/\[\[RECITE:\s*[^\]]+\]\]/g, '') // Hapus tag Recite juga
+                          .replace(/\*\*/g, '').replace(/[\(\)]/g, '').trim();
     if (!cleanText) return;
     const sentences = cleanText.match(/[^\.!\?]+[\.!\?]+/g) || [cleanText];
     let currentSentence = 0;
@@ -283,7 +292,9 @@ const ChatInterface = ({ knowledgeList }) => {
   };
 
   const copyToClipboard = (text, msgId) => {
-    const cleanText = text.replace(/\[\[AUDIO:\s*[^\]]+\]\]/g, '').replace(/\*\*/g, '');
+    const cleanText = text.replace(/\[\[AUDIO:\s*[^\]]+\]\]/g, '')
+                          .replace(/\[\[RECITE:\s*[^\]]+\]\]/g, '') // Bersihkan tag Recite
+                          .replace(/\*\*/g, '');
     navigator.clipboard.writeText(cleanText).then(() => { setCopiedId(msgId); setTimeout(() => setCopiedId(null), 2000); });
   };
 
@@ -291,14 +302,36 @@ const ChatInterface = ({ knowledgeList }) => {
   const findAudioData = (id) => { const item = knowledgeList.find(k => k.id === id); return item ? item.audioData : null; };
 
   const renderMessageContent = (text) => {
-    const parts = text.split(/(\[\[AUDIO:\s*[^\]]+\]\])/g);
+    // Split by AUDIO tag first
+    const parts = text.split(/(\[\[AUDIO:\s*[^\]]+\]\]|\[\[RECITE:\s*[^\]]+\]\])/g);
+    
     return parts.map((part, index) => {
-      const match = part.match(/\[\[AUDIO:\s*([^\]]+)\]\]/);
-      if (match) {
-        const rawId = match[1].trim(); const audioId = rawId.replace(/[.,!?;:]$/, ''); const audioSrc = findAudioData(audioId);
-        if (audioSrc) return <div key={index} className="mt-3 mb-3 bg-teal-50 p-3 sm:p-4 rounded-xl border border-teal-200 shadow-sm"><p className="text-sm font-bold text-teal-800 mb-2 flex items-center gap-2"><div className="bg-teal-600 text-white p-1 rounded-full"><Icons.Play size={14}/></div>Contoh Bacaan:</p><audio controls className="w-full h-8 sm:h-10" src={audioSrc} /></div>;
-        else return <span key={index} className="text-xs text-amber-600 italic bg-amber-50 px-2 py-1 rounded border border-amber-200 mt-1 inline-block">(Audio untuk materi ini belum tersedia)</span>;
+      // 1. Cek Admin Audio (Contoh Potongan)
+      const matchAudio = part.match(/\[\[AUDIO:\s*([^\]]+)\]\]/);
+      if (matchAudio) {
+        const rawId = matchAudio[1].trim(); const audioId = rawId.replace(/[.,!?;:]$/, ''); const audioSrc = findAudioData(audioId);
+        if (audioSrc) return <div key={index} className="mt-3 mb-3 bg-teal-50 p-3 sm:p-4 rounded-xl border border-teal-200 shadow-sm"><p className="text-sm font-bold text-teal-800 mb-2 flex items-center gap-2"><div className="bg-teal-600 text-white p-1 rounded-full"><Icons.Play size={14}/></div>Contoh Bacaan (Admin):</p><audio controls className="w-full h-8 sm:h-10" src={audioSrc} /></div>;
+        else return <span key={index} className="text-xs text-amber-600 italic bg-amber-50 px-2 py-1 rounded border border-amber-200 mt-1 inline-block">(Audio belum tersedia)</span>;
       }
+
+      // 2. Cek Recite API (Syeikh Ayman Suwaid)
+      const matchRecite = part.match(/\[\[RECITE:(\d+):(\d+)\]\]/);
+      if (matchRecite) {
+         const surah = matchRecite[1].padStart(3, '0');
+         const ayah = matchRecite[2].padStart(3, '0');
+         const url = `https://everyayah.com/data/Ayman_Sowaid_64kbps/${surah}${ayah}.mp3`;
+         return (
+            <div key={index} className="mt-3 mb-3 bg-indigo-50 p-3 sm:p-4 rounded-xl border border-indigo-200 shadow-sm">
+              <p className="text-sm font-bold text-indigo-800 mb-2 flex items-center gap-2">
+                <div className="bg-indigo-600 text-white p-1 rounded-full"><Icons.Mic size={14}/></div>
+                Syeikh Ayman Suwaid (QS {parseInt(surah)}:{parseInt(ayah)}):
+              </p>
+              <audio controls className="w-full h-8 sm:h-10" src={url} />
+            </div>
+         );
+      }
+
+      // 3. Render Teks Biasa
       const textParts = part.split(/\*\*(.*?)\*\*/g);
       return <span key={index}>{textParts.map((subPart, i) => i % 2 === 1 ? <strong key={i} className="font-bold text-teal-900">{subPart}</strong> : subPart)}</span>;
     });
@@ -339,7 +372,6 @@ const ChatInterface = ({ knowledgeList }) => {
         } catch (err) { alert("Gagal proses gambar."); setIsTyping(false); clearImageSelection(); return; }
     }
 
-    // Format Context agar rapi
     const knowledgeContext = knowledgeList.map(item => `MATERI: ${item.title}\nKATEGORI: ${item.category}\nSUMBER: ${item.source || 'Tidak disebutkan'}\nPENJELASAN: ${item.content}\n${item.audioData ? `[AUDIO_ID: ${item.id}]` : ''}\n---`).join('\n');
     
     const answer = await askGemini(userMsg.text, knowledgeContext, imageDataForAI);
@@ -409,9 +441,10 @@ const ChatInterface = ({ knowledgeList }) => {
 
         <form onSubmit={handleSend} className="relative flex items-center gap-2">
           {/* Input File Tersembunyi (Single Input for All) */}
+          {/* MENGHAPUS capture="environment" AGAR BROWSER MENAMPILKAN PILIHAN (KAMERA/GALERI) */}
           <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
 
-          {/* Tombol Kamera/Galeri & Suara */}
+          {/* Tombol Kamera & Suara */}
           <div className="flex gap-1 shrink-0">
              <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 sm:p-3.5 rounded-full border shadow-sm bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-teal-600 transition" title="Kirim Gambar/Foto"><Icons.Camera size={20} /></button>
              <button type="button" onClick={handleVoiceInput} className={`p-3 sm:p-3.5 rounded-full transition-all duration-200 border flex items-center justify-center shadow-sm ${isListening ? 'bg-red-500 text-white border-red-500 animate-pulse' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-teal-600'}`} title="Rekam Suara">{isListening ? <Icons.MicOff size={20} /> : <Icons.Mic size={20} />}</button>
@@ -822,26 +855,137 @@ const AdminPanel = ({ knowledgeList, user, collectionPath }) => {
 };
 
 // --- MAIN APP COMPONENT ---
+// --- MAIN APP COMPONENT ---
 export default function App() {
   const [user, setUser] = useState(null);
   const [mode, setMode] = useState('user'); 
   const [knowledgeList, setKnowledgeList] = useState([]);
   const [loading, setLoading] = useState(true);
+  
+  // State untuk modal login
   const [showLoginModal, setShowLoginModal] = useState(false);
+
+  // Firestore Path
   const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
   const collectionPath = ['artifacts', appId, 'public', 'data', 'tajwid_knowledge'];
 
-  useEffect(() => { const unsubscribe = onAuthStateChanged(auth, (currentUser) => { setUser(currentUser); if (currentUser && !currentUser.isAnonymous) { setMode('admin'); setShowLoginModal(false); setLoading(false); } else if (!currentUser) { signInAnonymously(auth).catch((err) => console.error("Anon Auth Error", err)); } else { setLoading(false); } }); return () => unsubscribe(); }, []);
-  useEffect(() => { if (!user) return; const q = query(collection(db, ...collectionPath)); const unsubscribeData = onSnapshot(q, (snapshot) => { const items = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })); items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0)); setKnowledgeList(items); setLoading(false); }); return () => unsubscribeData(); }, [user]);
+  // --- LOGIKA UTAMA (YANG DIPERBAIKI) ---
+  // Mendeteksi status login secara otomatis & real-time
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      setUser(currentUser);
+      
+      if (currentUser && !currentUser.isAnonymous) {
+        // KASUS 1: TERDETEKSI ADMIN
+        // Otomatis pindah ke mode admin & tutup loading/modal
+        setMode('admin'); 
+        setShowLoginModal(false); 
+        setLoading(false);
+      } else if (!currentUser) {
+        // KASUS 2: BELUM ADA USER
+        // Login sebagai tamu (Anonymous) dulu
+        signInAnonymously(auth).catch((err) => console.error("Anon Auth Error", err));
+      } else {
+        // KASUS 3: TAMU (ANONYMOUS)
+        // Biarkan di mode user
+        setLoading(false);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // --- Ambil Data Materi (Tetap Sama) ---
+  useEffect(() => {
+    // Hanya ambil data jika user sudah siap (baik admin maupun tamu)
+    if (!user) return;
+
+    const q = query(collection(db, ...collectionPath));
+    const unsubscribeData = onSnapshot(q, (snapshot) => {
+      const items = snapshot.docs.map(doc => ({
+        id: doc.id,
+        ...doc.data()
+      }));
+      // Urutkan dari yang terbaru
+      items.sort((a, b) => (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0));
+      setKnowledgeList(items);
+      setLoading(false);
+    });
+
+    return () => unsubscribeData();
+  }, [user]); // Dependency ke 'user' agar aman
+
+  // --- Keamanan Anti-Inspect (Tetap Sama) ---
+  useEffect(() => {
+    const handleContextMenu = (e) => e.preventDefault();
+    const handleKeyDown = (e) => {
+      if (
+        e.key === 'F12' ||
+        (e.ctrlKey && e.shiftKey && (e.key === 'I' || e.key === 'J')) ||
+        (e.ctrlKey && e.key === 'U')
+      ) {
+        e.preventDefault();
+      }
+    };
+    document.addEventListener('contextmenu', handleContextMenu);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('contextmenu', handleContextMenu);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, []);
+
+  // --- Helper untuk Tombol Navbar ---
+  // Cek apakah user saat ini adalah admin (bukan tamu)
+  const isUserAdmin = user && !user.isAnonymous;
 
   return (
     <div className="min-h-screen bg-slate-50 font-sans text-slate-900 pb-10">
-      <Navbar currentMode={mode} setMode={setMode} isAdminAuthenticated={user && !user.isAnonymous} setIsAdminModeAttempt={setShowLoginModal} />
-      {showLoginModal && <AdminLogin onClose={() => setShowLoginModal(false)} />}
+      <Navbar 
+        currentMode={mode} 
+        setMode={setMode} 
+        isAdminAuthenticated={isUserAdmin} // Gunakan status user langsung dari Firebase
+        setIsAdminModeAttempt={setShowLoginModal}
+      />
+
+      {showLoginModal && (
+        <AdminLogin 
+          // Tidak butuh onLogin manual lagi, karena useEffect di atas akan menangani
+          onClose={() => setShowLoginModal(false)}
+        />
+      )}
+
       <main className="max-w-6xl mx-auto px-4 py-6 sm:py-8">
-        {!user || loading ? (<div className="flex flex-col justify-center items-center h-[60vh] text-slate-400"><Icons.Loader size={48} /><p className="mt-4 text-sm font-medium animate-pulse">Menyiapkan Data...</p></div>) : mode === 'admin' && user && !user.isAnonymous ? (<AdminPanel knowledgeList={knowledgeList} user={user} collectionPath={collectionPath} />) : (<div className="max-w-3xl mx-auto"><div className="mb-4 sm:mb-6 text-center px-4"><h1 className="text-2xl sm:text-3xl font-extrabold text-teal-900 tracking-tight mb-2">Tajwid<span className="text-amber-500">Pintar</span></h1><p className="text-slate-500 font-medium text-sm sm:text-base">Asisten Cerdas Markaz Qur'an Darussalam</p></div><ChatInterface knowledgeList={knowledgeList} /></div>)}
+        {!user || loading ? (
+          <div className="flex flex-col justify-center items-center h-[60vh] text-slate-400">
+            <Icons.Loader size={48} />
+            <p className="mt-4 text-sm font-medium animate-pulse">Menyiapkan Data...</p>
+          </div>
+        ) : mode === 'admin' && isUserAdmin ? (
+          <AdminPanel knowledgeList={knowledgeList} user={user} collectionPath={collectionPath} />
+        ) : (
+          <div className="max-w-3xl mx-auto">
+             <div className="mb-4 sm:mb-6 text-center px-4">
+                <h1 className="text-2xl sm:text-3xl font-extrabold text-teal-900 tracking-tight mb-2">
+                  Tajwid<span className="text-amber-500">Pintar</span>
+                </h1>
+                <p className="text-slate-500 font-medium text-sm sm:text-base">Asisten Cerdas Markaz Qur'an Darussalam</p>
+             </div>
+             <ChatInterface knowledgeList={knowledgeList} />
+          </div>
+        )}
       </main>
-      <footer className="max-w-6xl mx-auto px-4 py-6 text-center"><div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 backdrop-blur-sm rounded-full border border-slate-200 shadow-sm"><div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse"></div><span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">TajwidPintar v1.2.0-Stable</span></div><p className="text-[9px] text-slate-400 mt-2 font-medium tracking-wide">© 2026 Markaz Qur'an Darussalam</p></footer>
+{/* --- LABEL VERSI APLIKASI (TAMBAHKAN DI SINI) --- */}
+      <footer className="max-w-6xl mx-auto px-4 py-6 text-center">
+        <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 backdrop-blur-sm rounded-full border border-slate-200 shadow-sm">
+          <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse"></div>
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
+  TajwidPintar v1.0.0-Stable
+</span>
+        </div>
+        <p className="text-[9px] text-slate-400 mt-2 font-medium tracking-wide">
+          © 2026 Markaz Qur'an Darussalam
+        </p>
+    </footer>
     </div>
   );
 }
