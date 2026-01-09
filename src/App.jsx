@@ -272,10 +272,14 @@ const ChatInterface = ({ knowledgeList }) => {
   const speak = (text, msgId) => {
     window.speechSynthesis.cancel();
     if (isSpeaking === msgId) { setIsSpeaking(null); return; }
-    const cleanText = text.replace(/\[\[AUDIO:\s*[^\]]+\]\]/g, '')
-                      .replace(/\[\[RECITE:\s*[^\]]+\]\]/g, '') 
-                      .replace(/<strong>/g, '').replace(/<\/strong>/g, '') // Tambahkan ini
-                      .replace(/\*\*/g, '').replace(/[\(\)]/g, '').trim();
+    const cleanText = text
+      .replace(/\[\[AUDIO:\s*[^\]]+\]\]/g, '')  // Hapus tag Audio Admin
+      .replace(/\[\[RECITE:\s*[^\]]+\]\]/g, '') // Hapus tag Audio Syeikh
+      .replace(/<[^>]*>/g, '')                  // Hapus semua tag HTML (seperti <strong>)
+      .replace(/[`]/g, '')
+      .replace(/\*/g, '')                       // Hapus SEMUA bintang (*), bukan cuma (**)
+      .replace(/[\[\]\(\)]/g, '')               // Hapus kurung siku [] dan kurung biasa ()
+      .trim();
     if (!cleanText) return;
     const sentences = cleanText.match(/[^\.!\?]+[\.!\?]+/g) || [cleanText];
     let currentSentence = 0;
