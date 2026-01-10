@@ -286,6 +286,17 @@ const ChatInterface = ({ knowledgeList }) => {
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
 
+  // ... di dalam ChatInterface, di bawah state input ...
+const textareaRef = useRef(null);
+
+// Tambahkan useEffect ini agar tinggi kolom otomatis menyesuaikan isi teks
+useEffect(() => {
+  if (textareaRef.current) {
+    textareaRef.current.style.height = 'auto'; // Reset tinggi
+    textareaRef.current.style.height = textareaRef.current.scrollHeight + 'px'; // Set tinggi sesuai konten
+  }
+}, [input]);
+
   const speak = (text, msgId) => {
     window.speechSynthesis.cancel();
     if (isSpeaking === msgId) { setIsSpeaking(null); return; }
@@ -508,7 +519,28 @@ const ChatInterface = ({ knowledgeList }) => {
              <button type="button" onClick={handleVoiceInput} className={`p-3 sm:p-3.5 rounded-full transition-all duration-200 border flex items-center justify-center shadow-sm ${isListening ? 'bg-red-500 text-white border-red-500 animate-pulse' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-teal-600'}`} title="Rekam Suara">{isListening ? <Icons.MicOff size={20} /> : <Icons.Mic size={20} />}</button>
           </div>
 
-          <input autoFocus type="text" className="w-full px-4 sm:px-5 py-3 sm:py-3.5 bg-slate-50 border border-slate-200 rounded-full focus:ring-2 focus:ring-teal-100 focus:border-teal-400 outline-none transition text-slate-700 placeholder:text-slate-400 text-sm sm:text-base" placeholder={selectedImage ? "Tambahkan keterangan gambar..." : "Tanya Ustadz..."} value={input} onChange={(e) => setInput(e.target.value)} disabled={isTyping} />
+          {/* GANTI INPUT LAMA DENGAN TEXTAREA INI */}
+<textarea
+  ref={textareaRef}
+  autoFocus
+  rows={1}
+  className="w-full pl-4 sm:pl-5 pr-12 py-3 sm:py-3.5 bg-slate-50 border border-slate-200 rounded-3xl focus:ring-2 focus:ring-teal-100 focus:border-teal-400 outline-none transition text-slate-700 placeholder:text-slate-400 text-sm sm:text-base resize-none overflow-hidden"
+  placeholder={selectedImage ? "Tambahkan keterangan gambar..." : "Tanya Ustadz..."}
+  value={input}
+  onChange={(e) => setInput(e.target.value)}
+  disabled={isTyping}
+  onKeyDown={(e) => {
+    // Agar tombol Enter mengirim pesan (bukan baris baru), kecuali pakai Shift+Enter
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      // Mencegah kirim jika kosong
+      if (input.trim() || selectedImage) {
+        handleSend(e);
+      }
+    }
+  }}
+/>
+
           <button type="submit" disabled={(!input.trim() && !selectedImage) || isTyping} className="absolute right-2 p-2 bg-teal-600 hover:bg-teal-700 text-white rounded-full transition disabled:opacity-50 shadow-md"><Icons.Send size={18} /></button>
         </form>
       </div>
