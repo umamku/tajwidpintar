@@ -204,9 +204,26 @@ const Navbar = ({ currentMode, setMode, isAdminAuthenticated, setIsAdminModeAtte
         </div>
       </div>
       <div className="flex bg-teal-800/50 rounded-full p-1 border border-teal-700 backdrop-blur-sm shrink-0">
-        <button onClick={() => setMode('user')} className={`flex items-center px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all ${currentMode === 'user' ? 'bg-amber-500 text-teal-950 shadow-md font-bold' : 'text-teal-100 hover:text-white hover:bg-teal-700'}`}>
+        
+        {/* --- TOMBOL USER (MODIFIKASI DISINI) --- */}
+        <button 
+            onClick={async () => { 
+                // FITUR BARU: Jika user adalah admin, logout dari Firebase saat pindah ke mode user.
+                // Ini memaksa admin login ulang jika ingin kembali ke dashboard nanti.
+                if (isAdminAuthenticated) {
+                    try {
+                        await signOut(auth); 
+                    } catch (error) {
+                        console.error("Gagal logout otomatis:", error);
+                    }
+                }
+                setMode('user'); 
+            }} 
+            className={`flex items-center px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all ${currentMode === 'user' ? 'bg-amber-500 text-teal-950 shadow-md font-bold' : 'text-teal-100 hover:text-white hover:bg-teal-700'}`}
+        >
           <Icons.User size={14} className="mr-1.5 sm:mr-2" /><span className="hidden sm:inline">Tanya Ustadz</span><span className="sm:hidden">Tanya</span>
         </button>
+
         <button onClick={() => { if (isAdminAuthenticated) { setMode('admin'); } else { setIsAdminModeAttempt(true); } }} className={`flex items-center px-3 py-1.5 sm:px-4 sm:py-2 rounded-full text-xs sm:text-sm font-medium transition-all ${currentMode === 'admin' ? 'bg-white text-teal-800 shadow-md font-bold' : 'text-teal-100 hover:text-white hover:bg-teal-700'}`}>
           <Icons.Shield size={14} className="mr-1.5 sm:mr-2" />Admin
         </button>
