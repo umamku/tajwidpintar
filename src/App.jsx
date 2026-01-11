@@ -74,6 +74,7 @@ const Icons = {
 Gift: (props) => (<IconWrapper {...props}><polyline points="20 12 20 22 4 22 4 12" /><rect x="2" y="7" width="20" height="5" /><line x1="12" y1="22" x2="12" y2="7" /><path d="M12 7H7.5a2.5 2.5 0 0 1 0-5C11 2 12 7 12 7z" /><path d="M12 7h4.5a2.5 2.5 0 0 0 0-5C13 2 12 7 12 7z" /></IconWrapper>),
   // Tambahkan ikon ini:
   UserPlus: (props) => (<IconWrapper {...props}><path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="8.5" cy="7" r="4" /><line x1="20" y1="8" x2="20" y2="14" /><line x1="23" y1="11" x2="17" y2="11" /></IconWrapper>),
+  Activity: (props) => (<IconWrapper {...props}><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></IconWrapper>),
 };
 
 // --- Configuration ---
@@ -96,14 +97,15 @@ const appId = 'tajwid-app-production';
 const apiKey = import.meta.env.VITE_GEMINI_API_KEY;
 
 // --- Helper: Call Gemini API (Updated for Recitation) ---
-async function askGemini(question, knowledgeContext, imageData = null) {
+// --- Helper: Call Gemini API (Updated for Recitation & Audio Check) ---
+async function askGemini(question, knowledgeContext, imageData = null, audioData = null) {
   const cleanKey = apiKey ? apiKey.trim() : "";
   if (!cleanKey) return "Error: API Key kosong/salah.";
 
   const targetModel = "gemini-2.5-flash"; 
   const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${cleanKey}`;
 
-  // --- PROMPT BARU: INTEGRASI SYEIKH AYMAN ---
+  // --- PROMPT BARU: INTEGRASI TEXT, GAMBAR, & AUDIO ---
   const systemPrompt = `
     Anda adalah Asisten Ustadz dalam bidang Ilmu Tajwid Al-Qur'an dari Markaz Qur'an Darussalam.
     
@@ -112,11 +114,16 @@ async function askGemini(question, knowledgeContext, imageData = null) {
     2. ILMU TAJWID (Context Data): Gunakan untuk hukum tajwid.
     
     INSTRUKSI AUDIO (SYEIKH AYMAN RUSHDI SUWAID):
-    - Jika user meminta membacakan ayat, ATAU jika kamu membahas/mengidentifikasi ayat tertentu dari gambar/pertanyaan, lampirkan tag khusus di akhir jawaban:
-      [[RECITE:NomorSurat:NomorAyat]]
-    - Contoh: Untuk Al-Fatihah ayat 1, tulis [[RECITE:1:1]].
-    - Jika ayatnya banyak, boleh lampirkan beberapa tag.
+    1. Jika Anda menggunakan tag [[RECITE:Surah:Ayah]] (Audio Eksternal), Anda BOLEH menyebut "Ini bacaan dari Syeikh Ayman Suwaid".
+    2. Jika Anda menggunakan ID dari Context Data (misal: [[AUDIO:xyz123]]), JANGAN menyebut Syeikh Ayman. Cukup sebut "Berikut contoh bacaannya:" atau "Silakan simak audio materi ini:".
     
+    INSTRUKSI KHUSUS FITUR "SIMAK BACAAN" (JIKA ADA INPUT AUDIO):
+    1. Simak audio user layaknya Ustadz menyimak setoran hafalan.
+    2. Identifikasi Surat dan Ayat apa yang sedang dibaca.
+    3. Evaluasi aspek: Makharijul Huruf (ketepatan huruf), Panjang Pendek (Mad), dan Ghunnah (dengung).
+    4. Berikan koreksi yang spesifik namun sopan. Contoh: "Huruf 'Ain terdengar kurang jelas", atau "Mad di kata X terlalu pendek".
+    5. Berikan pujian jika bacaan sudah fasih.
+
     INSTRUKSI UMUM:
     - Jawablah dengan ramah selayaknya Ustadz.
     - JANGAN menampilkan ID referensi database.
@@ -127,15 +134,34 @@ async function askGemini(question, knowledgeContext, imageData = null) {
     [CONTEXT DATA SELESAI]
   `;
 
-  const finalPrompt = systemPrompt + "\n\n" + "PERTANYAAN USER: " + (question || "Jelaskan hukum tajwid pada gambar ini.");
+  // Tentukan pertanyaan user (Prioritas: Input Teks -> Input Audio -> Default)
+  let userQuery = question;
+  if (!userQuery && audioData) {
+      userQuery = "Tolong simak bacaan saya dalam audio ini. Apakah ada kesalahan tajwid atau makhraj?";
+  } else if (!userQuery) {
+      userQuery = "Jelaskan hukum tajwid pada gambar ini.";
+  }
+
+  const finalPrompt = systemPrompt + "\n\n" + "PERTANYAAN USER: " + userQuery;
 
   const parts = [{ text: finalPrompt }];
   
+  // 1. Handle Gambar (Fitur Lama)
   if (imageData) {
       parts.push({
           inlineData: {
               mimeType: imageData.mimeType,
               data: imageData.base64
+          }
+      });
+  }
+
+  // 2. Handle Audio (Fitur Baru)
+  if (audioData) {
+      parts.push({
+          inlineData: {
+              mimeType: audioData.mimeType, // e.g., 'audio/webm' atau 'audio/mp3'
+              data: audioData.base64
           }
       });
   }
@@ -439,24 +465,36 @@ Mohon info selanjutnya. Terima kasih.
 // --- USER VIEW: Chat & Voice Interface ---
 // --- USER VIEW: Chat & Voice Interface ---
 // --- USER VIEW: Chat & Voice Interface ---
+// --- USER VIEW: Chat & Voice Interface ---
 const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }) => {
-  const [messages, setMessages] = useState([{ id: 1, role: 'ai', text: 'Assalamu’alaikum. Saya Asisten Tajwid dari Markaz Qur\'an Darussalam.\nSetiap jawaban saya merujuk pada referensi kitab para ulama yang tersimpan di database, bukan opini AI. Silakan tanyakan seputar tajwid, minta contoh bacaan (Syeikh Ayman Suwaid), atau kirim foto ayat untuk dianalisis.' }]);
+  // Update Pesan Pembuka untuk memberitahu fitur baru
+  const [messages, setMessages] = useState([{ id: 1, role: 'ai', text: 'Assalamu’alaikum. Saya Asisten Tajwid dari Markaz Qur\'an Darussalam.\nSetiap jawaban saya merujuk pada referensi kitab para ulama yang tersimpan di database, bukan opini AI. Silakan tanyakan seputar tajwid, minta contoh bacaan (Syeikh Ayman Suwaid), atau kirim foto ayat untuk dianalisis.\n\n🆕 **FITUR BARU:** Saya bisa menyimak bacaan Anda! Klik tombol **Ungu (Gelombang)** di bawah, bacakan ayat, dan saya akan mengoreksi tajwidnya.' }]);
+  
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-  const [isListening, setIsListening] = useState(false);
+  
+  // State untuk Input Suara (Speech-to-Text / Mic Merah)
+  const [isListening, setIsListening] = useState(false); 
+  
+  // [BARU] State untuk Mode Simak (Audio Analysis / Mic Ungu)
+  const [isSimakMode, setIsSimakMode] = useState(false); 
+
   const messagesEndRef = useRef(null);
   const [copiedId, setCopiedId] = useState(null);
   const [isSpeaking, setIsSpeaking] = useState(null);
    
-  // --- STATE GAMBAR USER ---
+  // State Gambar
   const [selectedImage, setSelectedImage] = useState(null);
   const [imagePreview, setImagePreview] = useState(null);
   const fileInputRef = useRef(null);
+  
+  // [BARU] Ref untuk menampung proses rekaman simak
+  const simakRecorderRef = useRef(null);
 
-  // --- [BARU] STATE UNTUK BANNER ---
+  // State Banner
   const [showBanner, setShowBanner] = useState(true);
 
-  // Ref untuk Textarea
+  // Ref Textarea
   const textareaRef = useRef(null);
 
   // Auto-resize textarea
@@ -473,6 +511,7 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
     const cleanText = text
       .replace(/\[\[AUDIO:\s*[^\]]+\]\]/g, '') 
       .replace(/\[\[RECITE:\s*[^\]]+\]\]/g, '')
+      .replace(/\[\[DAFTAR_KELAS\]\]/g, '')
       .replace(/<[^>]*>/g, '')                  
       .replace(/[`]/g, '')
       .replace(/\*/g, '')                       
@@ -496,7 +535,8 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
 
   const copyToClipboard = (text, msgId) => {
     const cleanText = text.replace(/\[\[AUDIO:\s*[^\]]+\]\]/g, '')
-                          .replace(/\[\[RECITE:\s*[^\]]+\]\]/g, '') 
+                          .replace(/\[\[RECITE:\s*[^\]]+\]\]/g, '')
+                          .replace(/\[\[DAFTAR_KELAS\]\]/g, '') 
                           .replace(/\*\*/g, '');
     navigator.clipboard.writeText(cleanText).then(() => { setCopiedId(msgId); setTimeout(() => setCopiedId(null), 2000); });
   };
@@ -504,12 +544,33 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
   useEffect(() => { messagesEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
   const findAudioData = (id) => { const item = knowledgeList.find(k => k.id === id); return item ? item.audioData : null; };
 
+  // Cari fungsi renderMessageContent yang lama, GANTI dengan ini:
   const renderMessageContent = (text) => {
       const formattedText = text.replace(/<strong>/g, '**').replace(/<\/strong>/g, '**');
-      const parts = formattedText.split(/(\[\[AUDIO:\s*[^\]]+\]\]|\[\[RECITE:\s*[^\]]+\]\])/g);
+      
+      // Update Regex untuk mendeteksi [[DAFTAR_KELAS]] juga
+      const parts = formattedText.split(/(\[\[AUDIO:\s*[^\]]+\]\]|\[\[RECITE:\s*[^\]]+\]\]|\[\[DAFTAR_KELAS\]\])/g);
    
     return parts.map((part, index) => {
-      // 1. Cek Admin Audio 
+      
+      // 1. Cek Tag Daftar Kelas (FITUR BARU)
+      if (part === '[[DAFTAR_KELAS]]') {
+         return (
+             <div key={index} className="mt-3 pt-3 border-t border-slate-100">
+                <p className="text-xs text-slate-500 italic mb-2">
+                   ⚠️ <b>Catatan Penting:</b> Pengecekan AI ini bersifat <b>pemeriksaan awal</b>. Untuk kesempurnaan bacaan dan pengambilan sanad, Anda tetap wajib talaqqi (bertemu langsung) dengan Guru/Ustadz.
+                </p>
+                <button 
+                    onClick={onOpenRegistration}
+                    className="flex items-center gap-2 bg-teal-600 text-white text-xs font-bold px-4 py-2 rounded-lg hover:bg-teal-700 transition shadow-sm w-full sm:w-auto justify-center"
+                >
+                    <Icons.UserPlus size={14} /> Daftar Jadi Peserta Tahsin
+                </button>
+             </div>
+         );
+      }
+
+      {/*// 2. Cek Admin Audio 
       const matchAudio = part.match(/\[\[AUDIO:\s*([^\]]+)\]\]/);
       if (matchAudio) {
         const rawId = matchAudio[1].trim(); const audioId = rawId.replace(/[.,!?;:]$/, ''); const audioSrc = findAudioData(audioId);
@@ -517,7 +578,7 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
         else return <span key={index} className="text-xs text-amber-600 italic bg-amber-50 px-2 py-1 rounded border border-amber-200 mt-1 inline-block">(Audio belum tersedia)</span>;
       }
 
-      // 2. Cek Recite API
+      // 3. Cek Recite API
       const matchRecite = part.match(/\[\[RECITE:(\d+):(\d+)\]\]/);
       if (matchRecite) {
           const surah = matchRecite[1].padStart(3, '0');
@@ -532,9 +593,59 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
               <audio controls className="w-full h-8 sm:h-10" src={url} />
             </div>
           );
+      }*/}
+
+      // Langkah A: Cek apakah ini tag Audio (AUDIO atau RECITE)
+      const matchGeneral = part.match(/\[\[(AUDIO|RECITE):\s*([^\]]+)\]\]/);
+      
+      if (matchGeneral) {
+          const content = matchGeneral[2].trim(); // Ambil isinya (misal: "1:1" atau "zyE...")
+
+          // Langkah B: Cek apakah isinya Angka:Angka? (Tanda pasti Syeikh Ayman)
+          const matchSurahAyah = content.match(/^(\d+):(\d+)$/);
+          
+          if (matchSurahAyah) {
+              // --- Render Player Syeikh Ayman ---
+              const surah = matchSurahAyah[1].padStart(3, '0');
+              const ayah = matchSurahAyah[2].padStart(3, '0');
+              const url = `https://everyayah.com/data/Ayman_Sowaid_64kbps/${surah}${ayah}.mp3`;
+              
+              return (
+                <div key={index} className="mt-3 mb-3 bg-indigo-50 p-3 sm:p-4 rounded-xl border border-indigo-200 shadow-sm">
+                  <p className="text-sm font-bold text-indigo-800 mb-2 flex items-center gap-2">
+                    <div className="bg-indigo-600 text-white p-1 rounded-full"><Icons.Mic size={14}/></div>
+                    Syeikh Ayman Suwaid (QS {parseInt(surah)}:{parseInt(ayah)}):
+                  </p>
+                  <audio controls className="w-full h-8 sm:h-10" src={url} />
+                </div>
+              );
+          } else {
+              // Langkah C: Jika BUKAN Angka, berarti pasti ID Database (Audio Admin)
+              // (Meskipun labelnya RECITE, kita paksa cari di database admin)
+              const audioId = content.replace(/[.,!?;:]$/, ''); // Bersihkan tanda baca
+              const audioSrc = findAudioData(audioId);
+              
+              if (audioSrc) {
+                  // --- Render Player Audio Admin ---
+                  return (
+                      <div key={index} className="mt-3 mb-3 bg-teal-50 p-3 sm:p-4 rounded-xl border border-teal-200 shadow-sm">
+                          <p className="text-sm font-bold text-teal-800 mb-2 flex items-center gap-2">
+                              <div className="bg-teal-600 text-white p-1 rounded-full"><Icons.Play size={14}/></div>
+                              Contoh Bacaan (Admin):
+                          </p>
+                          <audio controls className="w-full h-8 sm:h-10" src={audioSrc} />
+                      </div>
+                  );
+              } else {
+                  // Jika ID tidak ditemukan di database
+                  return <span key={index} className="text-xs text-amber-600 italic bg-amber-50 px-2 py-1 rounded border border-amber-200 mt-1 inline-block">(Audio belum tersedia)</span>;
+              }
+          }
       }
 
-      // 3. Render Teks Biasa
+      
+
+      // 4. Render Teks Biasa
       const textParts = part.split(/\*\*(.*?)\*\*/g);
       return <span key={index}>{textParts.map((subPart, i) => i % 2 === 1 ? <strong key={i} className="font-bold text-teal-900">{subPart}</strong> : subPart)}</span>;
     });
@@ -553,6 +664,73 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
 
   const clearImageSelection = () => { setSelectedImage(null); setImagePreview(null); if (fileInputRef.current) fileInputRef.current.value = ""; };
 
+  // --- [BARU] LOGIKA SIMAK BACAAN (KOREKSI SUARA) ---
+  const handleSimakMode = async () => {
+    // 1. Jika sedang merekam, STOP dan Kirim
+    if (isSimakMode && simakRecorderRef.current) {
+        simakRecorderRef.current.stop();
+        setIsSimakMode(false);
+        return;
+    }
+
+    // 2. Jika belum merekam, MULAI rekam
+    try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        const mediaRecorder = new MediaRecorder(stream);
+        simakRecorderRef.current = mediaRecorder;
+        const audioChunks = [];
+
+        mediaRecorder.ondataavailable = (event) => {
+            audioChunks.push(event.data);
+        };
+
+        mediaRecorder.onstop = async () => {
+            // Proses Audio Blob menjadi File
+            const audioBlob = new Blob(audioChunks, { type: 'audio/webm' }); 
+            
+            // Tampilkan pesan User secara Visual
+            const userMsg = { id: Date.now(), role: 'user', text: "🎤 [Mengirim Rekaman Suara untuk Dikoreksi...]" };
+            setMessages(prev => [...prev, userMsg]);
+            setIsTyping(true);
+
+            // Convert ke Base64 untuk dikirim ke Gemini
+            const reader = new FileReader();
+            reader.readAsDataURL(audioBlob);
+            reader.onloadend = async () => {
+                const base64Audio = reader.result.split(',')[1]; // Hapus header data:audio/...
+                
+                // Siapkan Context Database
+                const chatHistory = messages.slice(-5).map(m => `${m.role === 'user' ? 'USER' : 'USTADZ'}: ${m.text}`).join('\n');
+                const knowledgeContext = knowledgeList.map(item => `MATERI: ${item.title}\nKATEGORI: ${item.category}\nSUMBER: ${item.source || 'Tidak disebutkan'}\nPENJELASAN: ${item.content}\n${item.audioData ? `[AUDIO_ID: ${item.id}]` : ''}\n---`).join('\n');
+
+                // Panggil Gemini dengan Parameter Audio (Parameter ke-4)
+                const answer = await askGemini(
+                    null, // text prompt kosong (biar askGemini yang tentukan defaultnya)
+                    `RIWAYAT:\n${chatHistory}\nDATABASE:\n${knowledgeContext}`, 
+                    null, // no image
+                    { base64: base64Audio, mimeType: 'audio/webm' } // Audio Payload
+                );
+
+                const finalAnswer = answer + "\n\n[[DAFTAR_KELAS]]";
+
+                setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ai', text: finalAnswer }]);
+                setIsTyping(false);
+            };
+            
+            // Matikan track mic (Stop hardware)
+            stream.getTracks().forEach(track => track.stop());
+        };
+
+        mediaRecorder.start();
+        setIsSimakMode(true);
+
+    } catch (err) {
+        alert("Gagal mengakses mikrofon. Pastikan izin diberikan.");
+        console.error(err);
+    }
+  };
+
+  // --- Logic Kirim Pesan Biasa (Teks / Gambar) ---
   const handleSend = async (e) => {
     e.preventDefault();
 
@@ -598,12 +776,14 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
 
     const knowledgeContext = knowledgeList.map(item => `MATERI: ${item.title}\nKATEGORI: ${item.category}\nSUMBER: ${item.source || 'Tidak disebutkan'}\nPENJELASAN: ${item.content}\n${item.audioData ? `[AUDIO_ID: ${item.id}]` : ''}\n---`).join('\n');
     
+    // Panggil Gemini (Mode Teks/Gambar)
     const answer = await askGemini(userMsg.text, `RIWAYAT:\n${chatHistory}\nDATABASE:\n${knowledgeContext}`, imageDataForAI);
     
     setMessages(prev => [...prev, { id: Date.now() + 1, role: 'ai', text: answer }]);
     setIsTyping(false);
   };
 
+  // --- Logic Voice Typing (Speech-to-Text) ---
   const handleVoiceInput = () => {
     if (!('webkitSpeechRecognition' in window)) { alert("Maaf, browser Anda tidak mendukung fitur input suara."); return; }
     const recognition = new window.webkitSpeechRecognition();
@@ -614,7 +794,7 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
   return (
     <div className="flex flex-col h-[calc(100dvh-130px)] sm:h-[calc(100vh-140px)] bg-white rounded-xl sm:rounded-2xl shadow-xl overflow-hidden border border-teal-100">
       
-      {/* --- BANNER PENDAFTARAN (DENGAN TOMBOL X) --- */}
+      {/* --- BANNER PENDAFTARAN --- */}
       {showBanner && isRegistrationOpen && (
         <div 
           onClick={onOpenRegistration}
@@ -631,15 +811,12 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
           </div>
           
           <div className="flex items-center gap-3">
-             {/* Ikon Panah (Indikator Klik) */}
              <div className="text-amber-400 group-hover:translate-x-1 transition-transform">
                 <IconWrapper size={16}><polyline points="9 18 15 12 9 6" /></IconWrapper>
              </div>
-
-             {/* TOMBOL X (TUTUP) */}
              <button 
                 onClick={(e) => {
-                  e.stopPropagation(); // Mencegah modal terbuka saat klik X
+                  e.stopPropagation(); 
                   setShowBanner(false);
                 }}
                 className="ml-2 text-amber-400 hover:text-red-500 hover:bg-amber-100 p-1 rounded-full transition-colors z-20"
@@ -651,6 +828,7 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
         </div>
       )}
 
+      {/* --- AREA CHAT --- */}
       <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-4 bg-teal-50/30">
         {messages.map((msg) => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
@@ -682,10 +860,11 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
             </div>
           </div>
         ))}
-        {isTyping && <div className="flex justify-start ml-10 sm:ml-12"><div className="bg-white border border-teal-100 p-3 rounded-2xl rounded-tl-none flex items-center gap-2 shadow-sm"><Icons.Loader size={14} className="text-teal-500 animate-spin" /><span className="text-xs text-slate-400 font-medium ml-2">Sedang mencari dalil...</span></div></div>}
+        {isTyping && <div className="flex justify-start ml-10 sm:ml-12"><div className="bg-white border border-teal-100 p-3 rounded-2xl rounded-tl-none flex items-center gap-2 shadow-sm"><Icons.Loader size={14} className="text-teal-500 animate-spin" /><span className="text-xs text-slate-400 font-medium ml-2">Sedang {isSimakMode ? 'menganalisis suara...' : 'mencari dalil...'}</span></div></div>}
         <div ref={messagesEndRef} />
       </div>
       
+      {/* --- AREA INPUT --- */}
       <div className="p-3 sm:p-4 bg-white border-t border-teal-100 relative">
         {imagePreview && (
             <div className="absolute bottom-full left-0 w-full bg-slate-50 p-3 border-t border-teal-100 flex items-center gap-3 animate-in slide-in-from-bottom-2">
@@ -700,9 +879,22 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
         <form onSubmit={handleSend} className="relative flex items-center gap-2">
           <input type="file" accept="image/*" ref={fileInputRef} onChange={handleImageSelect} className="hidden" />
 
+          {/* AREA TOMBOL KIRI (Upload & Simak) */}
           <div className="flex gap-1 shrink-0">
+             {/* Tombol Kamera */}
              <button type="button" onClick={() => fileInputRef.current?.click()} className="p-3 sm:p-3.5 rounded-full border shadow-sm bg-slate-50 text-slate-500 hover:bg-slate-100 hover:text-teal-600 transition" title="Kirim Gambar/Foto"><Icons.Camera size={20} /></button>
-             <button type="button" onClick={handleVoiceInput} className={`p-3 sm:p-3.5 rounded-full transition-all duration-200 border flex items-center justify-center shadow-sm ${isListening ? 'bg-red-500 text-white border-red-500 animate-pulse' : 'bg-slate-50 text-slate-500 border-slate-200 hover:bg-slate-100 hover:text-teal-600'}`} title="Rekam Suara">{isListening ? <Icons.MicOff size={20} /> : <Icons.Mic size={20} />}</button>
+             
+             {/* --- [BARU] TOMBOL SIMAK BACAAN (UNGGULAN) --- */}
+             <button 
+                type="button" 
+                onClick={handleSimakMode} 
+                className={`p-3 sm:p-3.5 rounded-full transition-all duration-300 border flex items-center justify-center shadow-md ${isSimakMode ? 'bg-indigo-600 text-white border-indigo-600 animate-pulse ring-4 ring-indigo-200' : 'bg-indigo-50 text-indigo-600 border-indigo-200 hover:bg-indigo-600 hover:text-white'}`} 
+                title="Koreksi Bacaan (Simak AI)"
+             >
+                {/* Gunakan ikon Stop saat merekam, dan Activity (Gelombang) saat standby */}
+                {isSimakMode ? <Icons.Stop size={20} /> : <Icons.Activity size={20} />}
+             </button>
+             {/* ------------------------------------------- */}
           </div>
 
           <textarea
@@ -710,10 +902,10 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
             autoFocus
             rows={1}
             className="w-full pl-4 sm:pl-5 pr-12 py-3 sm:py-3.5 bg-slate-50 border border-slate-200 rounded-3xl focus:ring-2 focus:ring-teal-100 focus:border-teal-400 outline-none transition text-slate-700 placeholder:text-slate-400 text-sm sm:text-base resize-none overflow-hidden"
-            placeholder={selectedImage ? "Tambahkan keterangan gambar..." : "Tanya Ustadz..."}
+            placeholder={selectedImage ? "Tambahkan keterangan gambar..." : "Tanya atau klik ikon Gelombang..."}
             value={input}
             onChange={(e) => setInput(e.target.value)}
-            disabled={isTyping}
+            disabled={isTyping || isSimakMode}
             onKeyDown={(e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                 e.preventDefault();
@@ -724,7 +916,13 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
             }}
             />
 
-          <button type="submit" disabled={(!input.trim() && !selectedImage) || isTyping} className="absolute right-2 p-2 bg-teal-600 hover:bg-teal-700 text-white rounded-full transition disabled:opacity-50 shadow-md"><Icons.Send size={18} /></button>
+          {/* Tombol Kanan: Kirim Teks ATAU Voice Typing */}
+          {input.trim() || selectedImage ? (
+             <button type="submit" disabled={isTyping} className="absolute right-2 p-2 bg-teal-600 hover:bg-teal-700 text-white rounded-full transition disabled:opacity-50 shadow-md"><Icons.Send size={18} /></button>
+          ) : (
+             <button type="button" onClick={handleVoiceInput} className={`absolute right-2 p-2 rounded-full transition-all ${isListening ? 'bg-red-500 text-white animate-pulse' : 'text-slate-400 hover:text-teal-600 bg-transparent'}`} title="Ketik dengan Suara"><Icons.Mic size={18} /></button>
+          )}
+
         </form>
       </div>
     </div>
@@ -1332,7 +1530,7 @@ const appId = typeof __app_id !== 'undefined' ? __app_id : 'default-app-id';
         <div className="inline-flex items-center gap-2 px-3 py-1 bg-white/50 backdrop-blur-sm rounded-full border border-slate-200 shadow-sm cursor-default">
           <div className="w-1.5 h-1.5 bg-teal-500 rounded-full animate-pulse"></div>
           <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
-            TajwidPintar v1.0.0-Stable
+            TajwidPintar v2.2-Stable
           </span>
         </div>
 
