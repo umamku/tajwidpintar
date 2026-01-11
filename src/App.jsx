@@ -289,7 +289,7 @@ const DonationModal = ({ onClose }) => {
   const bendaharaWA = "6287886744301"; 
 
   const handleContact = () => {
-    const text = `Assalamu'alaikum Admin/Bendahara, saya ingin berpartisipasi dalam Infaq Dakwah pengembangan teknologi Qur'an. Mohon informasi nomor rekeningnya.`;
+    const text = `Assalamu'alaikum Admin/Bendahara, saya ingin berpartisipasi dalam Infaq Dakwah melalui Markaz Qur'an Darussalam. Mohon informasi nomor rekeningnya.`;
     const url = `https://wa.me/${bendaharaWA}?text=${encodeURIComponent(text)}`;
     window.open(url, '_blank');
   };
@@ -323,7 +323,7 @@ const DonationModal = ({ onClose }) => {
              <div>
                 <p className="text-sm font-bold text-teal-900">Informasi Rekening</p>
                 <p className="text-xs text-slate-500 leading-relaxed px-2 mt-1">
-                   Silakan hubungi bendahara Markaz Qur'an Darussalam, nomor rekening akan diinformasikan langsung oleh bendahara.
+                   Untuk berinfaq, silakan hubungi bendahara Markaz Qur'an Darussalam.
                 </p>
              </div>
 
