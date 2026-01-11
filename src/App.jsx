@@ -305,9 +305,9 @@ const DonationModal = ({ onClose }) => {
           <div className="bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 backdrop-blur-md shadow-inner border border-white/30">
             <Icons.Gift size={32} className="text-white drop-shadow-sm" />
           </div>
-          <h2 className="text-xl font-bold">Infaq Dakwah</h2>
+          <h2 className="text-xl font-bold">Dukung Program Dakwah</h2>
           <p className="text-amber-50 text-xs mt-1 opacity-90">
-            Salurkan partisipasi kebaikan untuk teknologi Qur'an
+            Salurkan partisipasi dalam proyek kebaikan
           </p>
         </div>
 
