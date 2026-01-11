@@ -558,7 +558,7 @@ const ChatInterface = ({ knowledgeList, onOpenRegistration, isRegistrationOpen }
          return (
              <div key={index} className="mt-3 pt-3 border-t border-slate-100">
                 <p className="text-xs text-slate-500 italic mb-2">
-                   ⚠️ <b>Catatan Penting:</b> Pengecekan AI ini bersifat <b>pemeriksaan awal</b>. Untuk kesempurnaan bacaan dan pengambilan sanad, Anda tetap wajib talaqqi (bertemu langsung) dengan Guru/Ustadz.
+                   ⚠️ <b>Catatan Penting:</b> Pengecekan bacaan ini bersifat <b>pemeriksaan awal</b>. Untuk kesempurnaan bacaan dan pengambilan sanad, Anda tetap wajib talaqqi (bertemu langsung) dengan Guru/Ustadz.
                 </p>
                 <button 
                     onClick={onOpenRegistration}
