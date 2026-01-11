@@ -284,73 +284,64 @@ const AdminLogin = ({ onClose }) => {
 
 
 const DonationModal = ({ onClose }) => {
-  const [copied, setCopied] = useState(false);
+  
+  // GANTI NOMOR INI DENGAN NOMOR WA BENDAHARA ASLI
+  const bendaharaWA = "6287886744301"; 
 
-  // GANTI DATA INI DENGAN DATA ASLI ANDA
-  const bankData = {
-    bank: "BSI (Bank Syariah Indonesia)",
-    number: "7057867811", // Ganti dengan no rek asli
-    name: "Cucu Nurjanah"
-  };
-
-  const handleCopy = () => {
-    navigator.clipboard.writeText(bankData.number);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+  const handleContact = () => {
+    const text = `Assalamu'alaikum Admin/Bendahara, saya ingin berpartisipasi dalam Infaq Dakwah pengembangan teknologi Qur'an. Mohon informasi nomor rekeningnya.`;
+    const url = `https://wa.me/${bendaharaWA}?text=${encodeURIComponent(text)}`;
+    window.open(url, '_blank');
   };
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-200">
-      {/* PERBAIKAN: Tambah 'flex flex-col max-h-[90vh]' agar modal tidak melebihi layar */}
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-sm overflow-hidden relative flex flex-col max-h-[90vh]">
         
         <button onClick={onClose} className="absolute top-3 right-3 p-1 bg-slate-100 rounded-full text-slate-500 hover:bg-slate-200 transition z-10"><Icons.X size={18}/></button>
         
-        {/* Header: Tambah 'shrink-0' agar header tidak tergencet saat di-scroll */}
+        {/* Header */}
         <div className="bg-gradient-to-br from-amber-400 to-orange-500 p-6 text-center text-white shrink-0">
           <div className="bg-white/20 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-3 backdrop-blur-md shadow-inner border border-white/30">
             <Icons.Gift size={32} className="text-white drop-shadow-sm" />
           </div>
-          <h2 className="text-xl font-bold">Dukung Program Dakwah</h2>
-          <p className="text-amber-50 text-xs mt-1 opacity-90">Mari berpartisipasi mendukung kebaikan</p>
+          <h2 className="text-xl font-bold">Infaq Dakwah</h2>
+          <p className="text-amber-50 text-xs mt-1 opacity-90">
+            Salurkan partisipasi kebaikan untuk teknologi Qur'an
+          </p>
         </div>
 
-        {/* Konten: Tambah 'overflow-y-auto' agar bisa di-scroll jika layar pendek */}
+        {/* Konten */}
         <div className="p-6 space-y-5 overflow-y-auto">
-          {/* AREA QRIS (Opsional, jika punya gambar QRIS) */}
-          {/* --- FITUR QRIS DI-HIDE SEMENTARA ---
-    
-    <div className="border border-slate-200 rounded-xl p-4 flex flex-col items-center justify-center bg-slate-50">
-       <div className="w-32 h-32 bg-white border border-slate-200 flex items-center justify-center mb-2">
-          <span className="text-xs text-slate-400 text-center px-2">Tempat Gambar QRIS</span>
-       </div>
-       <p className="text-xs font-bold text-slate-600">Scan QRIS (GOPAY/OVO/DANA)</p>
-    </div>
+          
+          {/* Info Masking */}
+          <div className="bg-teal-50 border border-teal-100 rounded-xl p-5 text-center space-y-3">
+             <div className="bg-white w-14 h-14 rounded-full flex items-center justify-center mx-auto shadow-sm border border-teal-100 text-teal-600">
+                <Icons.Lock size={28} />
+             </div>
+             
+             <div>
+                <p className="text-sm font-bold text-teal-900">Informasi Rekening</p>
+                <p className="text-xs text-slate-500 leading-relaxed px-2 mt-1">
+                   Silakan hubungi bendahara Markaz Qur'an Darussalam, nomor rekening akan diinformasikan langsung oleh bendahara.
+                </p>
+             </div>
 
-    <div className="relative">
-       <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-200"></div></div>
-       <div className="relative flex justify-center text-xs uppercase"><span className="bg-white px-2 text-slate-400 font-medium">Atau Transfer Manual</span></div>
-    </div>
-
-*/}
-
-          {/* AREA REKENING */}
-          <div className="bg-teal-50 border border-teal-100 rounded-xl p-4">
-            <p className="text-xs text-teal-600 font-semibold mb-1">{bankData.bank}</p>
-            <div className="flex justify-between items-center">
-              <div>
-                <p className="text-lg font-bold text-teal-900 tracking-wide font-mono">{bankData.number}</p>
-                <p className="text-xs text-teal-700 truncate max-w-[180px]">a.n {bankData.name}</p>
-              </div>
-              <button onClick={handleCopy} className="p-2 bg-white border border-teal-200 rounded-lg text-teal-600 hover:bg-teal-600 hover:text-white transition shadow-sm" title="Salin No. Rek">
-                {copied ? <Icons.Check size={18}/> : <Icons.Copy size={18}/>}
-              </button>
-            </div>
+             <button 
+                onClick={handleContact} 
+                className="w-full py-3 bg-teal-600 hover:bg-teal-700 text-white rounded-xl font-bold shadow-md transition flex justify-center items-center gap-2 text-sm"
+             >
+                <Icons.Send size={16} /> Chat WhatsApp Bendahara
+             </button>
           </div>
 
-          <p className="text-center text-[10px] text-slate-400 leading-tight pb-2">
-            "Barangsiapa yang menunjuki kepada kebaikan, maka dia akan mendapatkan pahala seperti pahala orang yang mengerjakannya."<br/>(HR. Muslim)
-          </p>
+          <div className="text-center pt-2">
+            <p className="text-[10px] text-slate-500 italic font-medium leading-relaxed">
+              "Barangsiapa yang menunjuki kepada kebaikan, maka dia akan mendapatkan pahala seperti pahala orang yang mengerjakannya."
+            </p>
+            <p className="text-[9px] text-teal-600 font-bold mt-1">(HR. Muslim)</p>
+          </div>
+
         </div>
       </div>
     </div>
